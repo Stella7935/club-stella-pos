@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CLUB STELLA">
+<meta name="mobile-web-app-capable" content="yes">
+<title>CLUB STELLA 〜ステラ〜 管理システム</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap');
+:root{
+  --bg:#141019;--bg2:#1b1422;--card:#221a2c;--card2:#2b2136;
+  --gold:#caa14b;--gold2:#e6c778;--wine:#7a2e42;
+  --ink:#f5efe f;--ink:#f4eef4;--ink2:#c9bdc9;--ink3:#8d8296;
+  --green:#3fae6a;--green2:#173627;
+  --amber:#e0a83f;--amber2:#3a2e12;
+  --red:#e2544f;--red2:#3a1a1a;
+  --blue:#5088d6;--blue2:#182a3f;
+  --bd:#372a44;--bd2:#463758;
+  --r:16px;--r2:11px;--sh:0 6px 20px rgba(0,0,0,.4);
+  --safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:inherit;color:inherit;background:var(--card2);border:1px solid var(--bd2);border-radius:8px;padding:9px 10px;font-size:15px;width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--gold);outline-offset:-1px}
+label{display:block;font-size:12.5px;color:var(--ink3);margin:10px 0 4px;font-weight:500}
+label:first-child{margin-top:0}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:3px}
+.mono{font-family:'DM Mono',monospace}
+
+#hdr{position:sticky;top:0;z-index:100;padding:calc(10px + var(--safe-t)) 16px 10px;background:linear-gradient(180deg,var(--bg2),rgba(27,20,34,.96));border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;gap:10px}
+#hdr .logo{font-weight:900;font-size:17px;letter-spacing:.5px;color:var(--gold2);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hdr .logo small{color:var(--ink3);font-weight:500;font-size:11px;display:block}
+#hdr .clock{font-family:'DM Mono',monospace;color:var(--ink2);font-size:13px;text-align:right}
+#alertbar{background:var(--red2);border-bottom:1px solid #5a2323;padding:8px 14px;display:none;gap:8px;overflow-x:auto;white-space:nowrap}
+#alertbar.show{display:flex}
+#alertbar .chip{display:inline-flex;align-items:center;gap:6px;background:rgba(226,84,79,.18);border:1px solid #6a3030;color:#ffb3b0;padding:5px 10px;border-radius:20px;font-size:12.5px;font-weight:600;flex:none}
+#alertbar .chip.warn{background:rgba(224,168,63,.15);border-color:#6a5528;color:#ffd68a}
+
+#app{padding:14px 14px calc(90px + var(--safe-b));max-width:820px;margin:0 auto;min-height:70vh}
+.hide{display:none!important}
+
+/* Tabs */
+h2.viewtitle{font-size:17px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+h2.viewtitle .sub{font-size:12px;color:var(--ink3);font-weight:500}
+
+#nav{position:fixed;left:0;right:0;bottom:0;z-index:100;background:var(--bg2);border-top:1px solid var(--bd);display:flex;padding:6px 4px calc(6px + var(--safe-b));max-width:820px;margin:0 auto}
+#nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border-radius:10px;color:var(--ink3);font-size:10.5px;font-weight:600}
+#nav button .ic{font-size:19px;line-height:1}
+#nav button.active{color:var(--gold2);background:rgba(202,161,75,.1)}
+
+/* Cards / grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:14px;box-shadow:var(--sh)}
+.tablecard{background:var(--card);border:1.5px solid var(--bd);border-radius:var(--r);padding:14px;text-align:left;display:flex;flex-direction:column;gap:6px;min-height:112px;position:relative;overflow:hidden;transition:.15s}
+.tablecard.empty{border-style:dashed;opacity:.85}
+.tablecard.active{border-color:#3a5a8a;background:linear-gradient(160deg,var(--card),var(--blue2))}
+.tablecard.warn{border-color:var(--amber);background:linear-gradient(160deg,var(--card),var(--amber2));animation:pulseAmber 2s infinite}
+.tablecard.over{border-color:var(--red);background:linear-gradient(160deg,var(--card),var(--red2));animation:pulseRed 1.1s infinite}
+@keyframes pulseAmber{0%,100%{box-shadow:0 0 0 0 rgba(224,168,63,.35)}50%{box-shadow:0 0 0 6px rgba(224,168,63,0)}}
+@keyframes pulseRed{0%,100%{box-shadow:0 0 0 0 rgba(226,84,79,.45)}50%{box-shadow:0 0 0 8px rgba(226,84,79,0)}}
+.tablecard .tname{font-weight:800;font-size:16px}
+.tablecard .tstatus{font-size:11.5px;color:var(--ink3);font-weight:600}
+.tablecard .ttime{font-family:'DM Mono',monospace;font-size:20px;font-weight:600;margin-top:auto}
+.tablecard .tmeta{font-size:11.5px;color:var(--ink2)}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700}
+.badge.g{background:var(--green2);color:#7fe0a8}
+.badge.a{background:var(--amber2);color:var(--amber)}
+.badge.r{background:var(--red2);color:#ff9a97}
+.badge.gold{background:rgba(202,161,75,.15);color:var(--gold2)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 16px;border-radius:11px;font-weight:700;font-size:14px;background:var(--card2);border:1px solid var(--bd2);color:var(--ink)}
+.btn.primary{background:linear-gradient(160deg,var(--gold2),var(--gold));color:#2a1e08;border:none}
+.btn.wine{background:var(--wine);color:#ffd9df;border:none}
+.btn.ghost{background:transparent;border:1px solid var(--bd2)}
+.btn.sm{padding:7px 11px;font-size:12.5px;border-radius:9px}
+.btn.block{width:100%}
+.btn.danger{background:var(--red2);color:#ff9a97;border:1px solid #5a2a2a}
+.btn:disabled{opacity:.4}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.fab{position:fixed;right:calc(16px + (100vw - 820px)/2);bottom:calc(84px + var(--safe-b));z-index:90}
+@media (max-width:820px){.fab{right:16px}}
+
+/* Lists */
+.list{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--card);border:1px solid var(--bd);border-radius:var(--r2);padding:11px 13px}
+.row .rmain{flex:1;min-width:0}
+.row .rtitle{font-weight:700;font-size:14.5px}
+.row .rsub{font-size:12px;color:var(--ink3);margin-top:2px}
+.row .ramt{font-family:'DM Mono',monospace;font-weight:600;font-size:15px;white-space:nowrap}
+.section{margin-bottom:22px}
+.sectitle{font-size:13px;font-weight:700;color:var(--gold2);margin-bottom:8px;letter-spacing:.3px;display:flex;justify-content:space-between;align-items:center}
+.empty-hint{color:var(--ink3);font-size:13px;text-align:center;padding:22px 10px;border:1px dashed var(--bd2);border-radius:var(--r2)}
+
+/* Session screen */
+.timerbig{font-family:'DM Mono',monospace;font-size:40px;font-weight:700;text-align:center}
+.timerwrap{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:18px;text-align:center;margin-bottom:14px}
+.timerwrap .lbl{color:var(--ink3);font-size:12px;font-weight:600;margin-bottom:4px}
+.totalbar{position:sticky;bottom:calc(72px + var(--safe-b));background:var(--card2);border:1px solid var(--gold);border-radius:var(--r);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-top:14px;box-shadow:var(--sh)}
+.totalbar .amt{font-family:'DM Mono',monospace;font-size:22px;font-weight:800;color:var(--gold2)}
+.backtop{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.backtop .ic{font-size:20px}
+
+/* Modal */
+#overlay{position:fixed;inset:0;background:rgba(10,7,13,.72);z-index:300;display:none;align-items:flex-end;justify-content:center}
+#overlay.show{display:flex}
+#modal{background:var(--bg2);width:100%;max-width:520px;max-height:88vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:18px 18px calc(22px + var(--safe-b));border:1px solid var(--bd);animation:slideUp .18s ease-out}
+@keyframes slideUp{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+#modal h3{font-size:16.5px;font-weight:800;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+#modal h3 .x{color:var(--ink3);font-size:22px;line-height:1;padding:4px}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.chipsel{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+.chipsel .chip{padding:8px 13px;border-radius:20px;border:1.5px solid var(--bd2);font-size:13px;font-weight:600;color:var(--ink2)}
+.chipsel .chip.on{background:var(--gold);border-color:var(--gold);color:#2a1e08}
+.toast{position:fixed;top:calc(14px + var(--safe-t));left:50%;transform:translateX(-50%);background:var(--card2);border:1px solid var(--gold);color:var(--ink);padding:10px 18px;border-radius:30px;font-size:13.5px;font-weight:600;z-index:400;box-shadow:var(--sh);opacity:0;pointer-events:none;transition:.25s}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(6px)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13px}
+table.tbl th,table.tbl td{padding:7px 6px;border-bottom:1px solid var(--bd);text-align:left}
+table.tbl th{color:var(--ink3);font-weight:600;font-size:11.5px}
+.small{font-size:12px;color:var(--ink3)}
+.right{text-align:right}
+.stat{background:var(--card);border:1px solid var(--bd);border-radius:var(--r2);padding:12px}
+.stat .v{font-family:'DM Mono',monospace;font-size:19px;font-weight:700;color:var(--gold2)}
+.stat .k{font-size:11.5px;color:var(--ink3);margin-top:2px}
+.statgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px}
+@media(min-width:560px){.statgrid{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+<div id="hdr">
+  <div class="logo" id="storeNameHdr">CLUB STELLA<small id="storeSubHdr">〜ステラ〜</small></div>
+  <div class="clock" id="clockDisp">--:--:--</div>
+</div>
+<div id="alertbar"></div>
+<div id="app"></div>
+<div id="nav"></div>
+<div id="overlay"><div id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const STORAGE_KEY = 'clubStellaPosData_v1';
+const uid = (p)=> p+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const yen = (n)=> '¥'+Math.round(n||0).toLocaleString('ja-JP');
+const pad2 = (n)=> String(n).padStart(2,'0');
+
+function defaultState(){
+  return {
+    settings:{
+      storeName:'CLUB STELLA',
+      storeSub:'〜ステラ〜',
+      defaultNominationFee:3000
+    },
+    tables:[
+      {id:uid('tb'),name:'A-1',capacity:6},
+      {id:uid('tb'),name:'A-2',capacity:6},
+      {id:uid('tb'),name:'B-1',capacity:4},
+      {id:uid('tb'),name:'B-2',capacity:4},
+      {id:uid('tb'),name:'VIP',capacity:10}
+    ],
+    setPlans:[
+      {id:uid('pl'),name:'スタンダード60分',durationMin:60,extensionMin:30,extensionPrice:5000,
+        rows:[
+          {minGuests:1,maxGuests:2,minCast:1,maxCast:1,price:8000},
+          {minGuests:1,maxGuests:2,minCast:2,maxCast:2,price:12000},
+          {minGuests:3,maxGuests:5,minCast:2,maxCast:3,price:18000},
+          {minGuests:6,maxGuests:99,minCast:3,maxCast:6,price:28000}
+        ]}
+    ],
+    products:[
+      {id:uid('pr'),name:'シャンパン(レギュラー)',price:28000,category:'bottle',backEligible:true},
+      {id:uid('pr'),name:'ボトル(ウイスキー)',price:15000,category:'bottle',backEligible:true},
+      {id:uid('pr'),name:'キャストドリンク',price:1500,category:'drink',backEligible:true},
+      {id:uid('pr'),name:'お通し',price:1000,category:'other',backEligible:false}
+    ],
+    nominationRanks:[
+      {id:uid('rk'),name:'新人',fee:2000},
+      {id:uid('rk'),name:'レギュラー',fee:3000},
+      {id:uid('rk'),name:'No.1',fee:6000}
+    ],
+    staff:[],
+    shifts:[],
+    sessions:[]
+  };
+}
+
+let state = load();
+let ui = { tab:'floor', sessionId:null, editing:{} };
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      const d = defaultState();
+      parsed.settings = Object.assign({}, d.settings, parsed.settings||{});
+      return parsed;
+    }
+  }catch(e){ console.error('load failed', e); }
+  return defaultState();
+}
+function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._h);
+  toast._h = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function beep(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination);
+    g.gain.setValueAtTime(.15, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime+.35);
+    o.start(); o.stop(ctx.currentTime+.35);
+  }catch(e){}
+}
+
+/* ---------- Modal ---------- */
+function openModal(html){
+  document.getElementById('modal').innerHTML = html;
+  document.getElementById('overlay').classList.add('show');
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('show'); }
+document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeModal(); });
+
+/* ---------- Helpers: staff / lookups ---------- */
+const activeStaff = ()=> state.staff.filter(s=>s.active!==false);
+const activeCast = ()=> activeStaff().filter(s=>s.role==='cast');
+const staffById = (id)=> state.staff.find(s=>s.id===id);
+const rankById = (id)=> state.nominationRanks.find(r=>r.id===id);
+const productById = (id)=> state.products.find(p=>p.id===id);
+const planById = (id)=> state.setPlans.find(p=>p.id===id);
+const tableById = (id)=> state.tables.find(t=>t.id===id);
+
+function openSessionForTable(tableId){
+  return state.sessions.find(s=>s.tableId===tableId && s.status==='open');
+}
+function sessionTotal(s){
+  const items = (s.items||[]).reduce((sum,it)=> sum + it.unitPrice*it.qty, 0);
+  return Math.max(0, items - (s.discount||0));
+}
+function findSetPrice(planId, guestCount, castCount){
+  const plan = planById(planId);
+  if(!plan) return null;
+  const row = plan.rows.find(r=> guestCount>=r.minGuests && guestCount<=r.maxGuests && castCount>=r.minCast && castCount<=r.maxCast);
+  return row ? row.price : null;
+}
+
+/* ---------- Nav ---------- */
+const TABS = [
+  {id:'floor', ic:'◆', label:'フロア'},
+  {id:'menu', ic:'☰', label:'メニュー'},
+  {id:'staff', ic:'★', label:'スタッフ'},
+  {id:'payroll', ic:'¥', label:'給与'},
+  {id:'daily', ic:'▤', label:'収支'},
+  {id:'settings', ic:'⚙', label:'設定'}
+];
+function renderNav(){
+  document.getElementById('nav').innerHTML = TABS.map(t=>
+    `<button data-action="tab" data-tab="${t.id}" class="${ui.tab===t.id && !ui.sessionId?'active':''}">
+      <span class="ic">${t.ic}</span><span>${t.label}</span>
+    </button>`).join('');
+}
+
+/* ---------- Clock / alert loop ---------- */
+function tick(){
+  const now = new Date();
+  document.getElementById('clockDisp').textContent = now.toLocaleTimeString('ja-JP',{hour12:false});
+  updateAlertBar(now);
+  if(ui.tab==='floor' && !ui.sessionId) renderFloor();
+  if(ui.sessionId){
+    const s = state.sessions.find(x=>x.id===ui.sessionId);
+    if(s && s.status==='open') renderSessionTimerOnly(s);
+  }
+}
+function updateAlertBar(now){
+  const bar = document.getElementById('alertbar');
+  const open = state.sessions.filter(s=>s.status==='open');
+  let changed=false;
+  const chips=[];
+  open.forEach(s=>{
+    const remain = s.setEndTime - now.getTime();
+    const tb = tableById(s.tableId);
+    s._alert = s._alert || {};
+    if(remain<=0){
+      chips.push(`<span class="chip">⏰ ${tb?tb.name:'?'}卓：時間経過 ${Math.floor(-remain/60000)}分超過</span>`);
+      if(!s._alert.over){ s._alert.over=true; beep(); changed=true; }
+    } else if(remain<=10*60*1000){
+      chips.push(`<span class="chip warn">⏳ ${tb?tb.name:'?'}卓：残り${Math.ceil(remain/60000)}分</span>`);
+      if(!s._alert.warn){ s._alert.warn=true; beep(); changed=true; }
+    }
+  });
+  bar.innerHTML = chips.join('');
+  bar.classList.toggle('show', chips.length>0);
+}
+
+/* ---------- FLOOR ---------- */
+function renderFloor(){
+  const now=Date.now();
+  const cards = state.tables.map(tb=>{
+    const s = openSessionForTable(tb.id);
+    if(!s){
+      return `<button class="tablecard empty" data-action="openTable" data-id="${tb.id}">
+        <div class="tname">${esc(tb.name)}</div>
+        <div class="tstatus">空席</div>
+        <div class="tmeta">定員${tb.capacity}名</div>
+      </button>`;
+    }
+    const remain = s.setEndTime-now;
+    let cls='active', statusTxt=`使用中・残り${fmtMin(remain)}`;
+    if(remain<=0){ cls='over'; statusTxt=`時間経過 +${fmtMin(-remain)}`; }
+    else if(remain<=10*60*1000){ cls='warn'; statusTxt=`まもなく終了 残り${fmtMin(remain)}`; }
+    const castNames = s.castIds.map(id=>{const c=staffById(id);return c?c.name:'';}).filter(Boolean).join('・');
+    return `<button class="tablecard ${cls}" data-action="openSession" data-id="${s.id}">
+      <div class="tname">${esc(tb.name)} <span class="badge gold">${s.guestCount}名</span></div>
+      <div class="tstatus">${statusTxt}</div>
+      <div class="tmeta">${esc(castNames||'担当未設定')}</div>
+      <div class="ttime mono">${yen(sessionTotal(s))}</div>
+    </button>`;
+  }).join('');
+  document.getElementById('app').innerHTML = `
+    <h2 class="viewtitle">フロア状況 <span class="sub">${state.tables.length}卓</span></h2>
+    <div class="grid">${cards}</div>
+  `;
+}
+function fmtMin(ms){
+  const m = Math.floor(Math.abs(ms)/60000);
+  const h = Math.floor(m/60); const mm = m%60;
+  return h>0 ? `${h}時間${mm}分` : `${mm}分`;
+}
+
+function openTableModal(tableId){
+  const tb = tableById(tableId);
+  const plans = state.setPlans;
+  const castOpts = activeCast().map(c=>`<span class="chip" data-role="cast" data-id="${c.id}">${esc(c.name)}</span>`).join('') || '<span class="small">キャスト未登録です。スタッフ管理から登録してください。</span>';
+  openModal(`
+    <h3>${esc(tb.name)}卓 オープン <span class="x" data-action="closeModal">&times;</span></h3>
+    <label>人数</label>
+    <input type="number" id="mGuest" min="1" value="1" inputmode="numeric">
+    <label>担当キャスト（複数選択可）</label>
+    <div class="chipsel" id="mCastSel">${castOpts}</div>
+    <label>セットプラン</label>
+    <select id="mPlan">${plans.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
+    <label>セット料金（自動計算・手動修正可）</label>
+    <input type="number" id="mPrice" value="0" inputmode="numeric">
+    <label>お支払いタイミング</label>
+    <div class="chipsel">
+      <span class="chip on" data-role="pay" data-id="prepay">先払い</span>
+      <span class="chip" data-role="pay" data-id="postpay">後払い</span>
+    </div>
+    <div class="btnrow">
+      <button class="btn primary block" data-action="confirmOpenTable" data-tableid="${tableId}">卓をオープンする</button>
+    </div>
+  `);
+  const recalc = ()=>{
+    const g = parseInt(document.getElementById('mGuest').value)||1;
+    const castCount = document.querySelectorAll('#mCastSel .chip.on').length;
+    const planId = document.getElementById('mPlan').value;
+    const price = findSetPrice(planId, g, castCount||1);
+    if(price!=null) document.getElementById('mPrice').value = price;
+  };
+  document.getElementById('mGuest').addEventListener('input', recalc);
+  document.getElementById('mPlan').addEventListener('change', recalc);
+  document.getElementById('mCastSel').addEventListener('click', (e)=>{
+    const chip = e.target.closest('.chip'); if(!chip) return;
+    chip.classList.toggle('on'); recalc();
+  });
+  recalc();
+}
+function confirmOpenTable(tableId){
+  const guestCount = parseInt(document.getElementById('mGuest').value)||1;
+  const castIds = [...document.querySelectorAll('#mCastSel .chip.on')].map(c=>c.dataset.id);
+  const planId = document.getElementById('mPlan').value;
+  const price = parseInt(document.getElementById('mPrice').value)||0;
+  const payChip = document.querySelector('.chip[data-role="pay"].on');
+  const payTiming = payChip ? payChip.dataset.id : 'prepay';
+  const plan = planById(planId);
+  const now = Date.now();
+  const session = {
+    id: uid('ss'), tableId, openTime: now, guestCount, castIds, setPlanId: planId,
+    setEndTime: now + (plan?plan.durationMin:60)*60000,
+    payTiming, status:'open', discount:0,
+    items:[{id:uid('it'),type:'set',name:'セット料金('+(plan?plan.name:'')+')',unitPrice:price,qty:1,attributedCastId:null,createdAt:now}],
+    extensionCount:0, _alert:{}
+  };
+  state.sessions.push(session); save(); closeModal();
+  ui.sessionId = session.id; renderSession(session.id);
+  toast('卓をオープンしました');
+}
+document.getElementById('modal').addEventListener('click', (e)=>{
+  const chip = e.target.closest('.chip[data-role="pay"]');
+  if(chip){ document.querySelectorAll('.chip[data-role="pay"]').forEach(c=>c.classList.remove('on')); chip.classList.add('on'); }
+});
+
+/* ---------- SESSION DETAIL ---------- */
+function renderSession(sessionId){
+  const s = state.sessions.find(x=>x.id===sessionId);
+  if(!s){ ui.sessionId=null; ui.tab='floor'; renderFloor(); return; }
+  const tb = tableById(s.tableId);
+  const castNames = s.castIds.map(id=>staffById(id)?.name).filter(Boolean).join('・')||'未設定';
+  const itemsHtml = (s.items||[]).map(it=>{
+    const cast = it.attributedCastId ? staffById(it.attributedCastId) : null;
+    return `<div class="row">
+      <div class="rmain">
+        <div class="rtitle">${esc(it.name)} ${it.qty>1?`× ${it.qty}`:''}</div>
+        <div class="rsub">${cast?'担当: '+esc(cast.name):''}</div>
+      </div>
+      <div class="ramt">${yen(it.unitPrice*it.qty)}</div>
+      ${s.status==='open'?`<button class="btn sm ghost" data-action="removeItem" data-sid="${s.id}" data-iid="${it.id}">削除</button>`:''}
+    </div>`;
+  }).join('') || '<div class="empty-hint">明細がありません</div>';
+
+  document.getElementById('app').innerHTML = `
+    <div class="backtop"><button class="btn sm ghost" data-action="backToFloor"><span class="ic">←</span> フロアへ</button></div>
+    <h2 class="viewtitle">${esc(tb.name)}卓 <span class="sub">${s.status==='open'?'会計中':'会計済み'}</span></h2>
+    <div class="timerwrap" id="timerBox">
+      <div class="lbl">${s.status==='open'?'セット残り時間':'滞在時間'}</div>
+      <div class="timerbig" id="timerText">--:--</div>
+      <div class="small" style="margin-top:6px">人数 ${s.guestCount}名 ／ 担当 ${esc(castNames)} ／ ${s.payTiming==='prepay'?'先払い':'後払い'}</div>
+    </div>
+    ${s.status==='open'?`<div class="btnrow">
+      <button class="btn" data-action="extendSession" data-sid="${s.id}">＋延長</button>
+      <button class="btn" data-action="addItem" data-type="nomination" data-sid="${s.id}">＋指名料</button>
+      <button class="btn" data-action="addItem" data-type="drink" data-sid="${s.id}">＋キャストドリンク</button>
+      <button class="btn" data-action="addItem" data-type="bottle" data-sid="${s.id}">＋ボトル/商品</button>
+      <button class="btn" data-action="addItem" data-type="free" data-sid="${s.id}">＋自由入力</button>
+    </div>`:''}
+    <div class="section" style="margin-top:16px">
+      <div class="sectitle">明細</div>
+      <div class="list">${itemsHtml}</div>
+    </div>
+    ${s.status==='open'?`
+    <div class="totalbar">
+      <div><div class="small">合計</div><div class="amt">${yen(sessionTotal(s))}</div></div>
+      <button class="btn primary" data-action="closeSessionModal" data-sid="${s.id}">会計確定</button>
+    </div>`:`
+    <div class="statgrid">
+      <div class="stat"><div class="v">${yen(sessionTotal(s))}</div><div class="k">合計金額</div></div>
+      <div class="stat"><div class="v">${s.paymentMethod==='card'?'カード':'現金'}</div><div class="k">支払方法</div></div>
+      <div class="stat"><div class="v">${esc(staffById(s.confirmedByStaffId)?.name||'-')}</div><div class="k">確認者</div></div>
+      <div class="stat"><div class="v">${new Date(s.closeTime).toLocaleTimeString('ja-JP',{hour12:false})}</div><div class="k">会計時刻</div></div>
+    </div>`}
+  `;
+  renderSessionTimerOnly(s);
+}
+function renderSessionTimerOnly(s){
+  const el = document.getElementById('timerText');
+  if(!el) return;
+  const box = document.getElementById('timerBox');
+  if(s.status==='open'){
+    const remain = s.setEndTime - Date.now();
+    el.textContent = (remain<0?'-':'') + fmtClock(Math.abs(remain));
+    box.style.borderColor = remain<=0? 'var(--red)' : (remain<=10*60000? 'var(--amber)':'var(--bd)');
+    el.style.color = remain<=0? 'var(--red)' : (remain<=10*60000? 'var(--amber)':'var(--ink)');
+  } else {
+    el.textContent = fmtClock(s.closeTime - s.openTime);
+  }
+}
+function fmtClock(ms){
+  const totalSec = Math.floor(ms/1000);
+  const h = Math.floor(totalSec/3600), m=Math.floor((totalSec%3600)/60), sec=totalSec%60;
+  return h>0? `${h}:${pad2(m)}:${pad2(sec)}` : `${pad2(m)}:${pad2(sec)}`;
+}
+
+function extendSession(sid){
+  const s = state.sessions.find(x=>x.id===sid);
+  const plan = planById(s.setPlanId);
+  if(!plan) return;
+  s.setEndTime += plan.extensionMin*60000;
+  s.extensionCount = (s.extensionCount||0)+1;
+  s._alert = {};
+  s.items.push({id:uid('it'), type:'extension', name:`延長(${plan.extensionMin}分)`, unitPrice:plan.extensionPrice, qty:1, attributedCastId:null, createdAt:Date.now()});
+  save(); renderSession(sid); toast('延長しました');
+}
+function removeItem(sid,iid){
+  const s = state.sessions.find(x=>x.id===sid);
+  s.items = s.items.filter(it=>it.id!==iid);
+  save(); renderSession(sid);
+}
+
+function addItemModal(sid, type){
+  const s = state.sessions.find(x=>x.id===sid);
+  if(type==='nomination'){
+    const opts = activeCast().map(c=>{
+      const rank = rankById(c.nominationRankId);
+      const fee = rank? rank.fee : state.settings.defaultNominationFee;
+      return `<option value="${c.id}" data-fee="${fee}">${esc(c.name)}${rank?'（'+esc(rank.name)+' '+yen(fee)+'）':''}</option>`;
+    }).join('');
+    openModal(`
+      <h3>指名料を追加 <span class="x" data-action="closeModal">&times;</span></h3>
+      <label>キャスト</label>
+      <select id="mCast">${opts||'<option value="">キャスト未登録</option>'}</select>
+      <label>金額</label>
+      <input type="number" id="mAmt" value="${activeCast()[0]? (rankById(activeCast()[0].nominationRankId)?.fee||state.settings.defaultNominationFee):state.settings.defaultNominationFee}">
+      <div class="btnrow"><button class="btn primary block" data-action="confirmAddItem" data-sid="${sid}" data-type="nomination">追加する</button></div>
+    `);
+    const sel = document.getElementById('mCast');
+    sel.addEventListener('change', ()=>{ document.getElementById('mAmt').value = sel.selectedOptions[0]?.dataset.fee || 0; });
+    return;
+  }
+  if(type==='drink'){
+    const drinks = state.products.filter(p=>p.category==='drink');
+    const castOpts = activeCast().map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    openModal(`
+      <h3>キャストドリンクを追加 <span class="x" data-action="closeModal">&times;</span></h3>
+      <label>担当キャスト</label>
+      <select id="mCast">${castOpts||'<option value="">キャスト未登録</option>'}</select>
+      <label>商品</label>
+      <select id="mProd">${drinks.map(p=>`<option value="${p.id}" data-price="${p.price}">${esc(p.name)}（${yen(p.price)}）</option>`).join('')||'<option value="">商品未登録</option>'}</select>
+      <label>数量</label>
+      <input type="number" id="mQty" value="1" min="1">
+      <div class="btnrow"><button class="btn primary block" data-action="confirmAddItem" data-sid="${sid}" data-type="drink">追加する</button></div>
+    `);
+    return;
+  }
+  if(type==='bottle'){
+    const prods = state.products.filter(p=>p.category!=='drink');
+    const castOpts = `<option value="">（担当なし）</option>` + activeCast().map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    openModal(`
+      <h3>ボトル・商品を追加 <span class="x" data-action="closeModal">&times;</span></h3>
+      <label>商品</label>
+      <select id="mProd">${prods.map(p=>`<option value="${p.id}" data-price="${p.price}">${esc(p.name)}（${yen(p.price)}）</option>`).join('')||'<option value="">商品未登録</option>'}</select>
+      <label>数量</label>
+      <input type="number" id="mQty" value="1" min="1">
+      <label>担当キャスト（任意・バック計算に使用）</label>
+      <select id="mCast">${castOpts}</select>
+      <div class="btnrow"><button class="btn primary block" data-action="confirmAddItem" data-sid="${sid}" data-type="bottle">追加する</button></div>
+    `);
+    return;
+  }
+  if(type==='free'){
+    openModal(`
+      <h3>自由入力で追加 <span class="x" data-action="closeModal">&times;</span></h3>
+      <label>品名</label>
+      <input type="text" id="mName" placeholder="例）お車代">
+      <label>金額</label>
+      <input type="number" id="mAmt" value="0">
+      <label>数量</label>
+      <input type="number" id="mQty" value="1" min="1">
+      <div class="btnrow"><button class="btn primary block" data-action="confirmAddItem" data-sid="${sid}" data-type="free">追加する</button></div>
+    `);
+    return;
+  }
+}
+function confirmAddItem(sid, type){
+  const s = state.sessions.find(x=>x.id===sid);
+  let item;
+  if(type==='nomination'){
+    const castId = document.getElementById('mCast').value;
+    const amt = parseInt(document.getElementById('mAmt').value)||0;
+    if(!castId){ toast('キャストを選択してください'); return; }
+    item = {id:uid('it'), type:'nomination', name:'指名料 ('+staffById(castId).name+')', unitPrice:amt, qty:1, attributedCastId:castId, createdAt:Date.now()};
+  } else if(type==='drink'){
+    const castId = document.getElementById('mCast').value;
+    const prodSel = document.getElementById('mProd');
+    const prod = productById(prodSel.value);
+    const qty = parseInt(document.getElementById('mQty').value)||1;
+    if(!castId||!prod){ toast('キャストと商品を選択してください'); return; }
+    item = {id:uid('it'), type:'drink', name:prod.name+'（'+staffById(castId).name+'）', unitPrice:prod.price, qty, attributedCastId:castId, createdAt:Date.now()};
+  } else if(type==='bottle'){
+    const prod = productById(document.getElementById('mProd').value);
+    const qty = parseInt(document.getElementById('mQty').value)||1;
+    const castId = document.getElementById('mCast').value || null;
+    if(!prod){ toast('商品を選択してください'); return; }
+    item = {id:uid('it'), type:'bottle', name:prod.name+(castId?'（'+staffById(castId).name+'）':''), unitPrice:prod.price, qty, attributedCastId:castId, createdAt:Date.now()};
+  } else if(type==='free'){
+    const name = document.getElementById('mName').value.trim()||'その他';
+    const amt = parseInt(document.getElementById('mAmt').value)||0;
+    const qty = parseInt(document.getElementById('mQty').value)||1;
+    item = {id:uid('it'), type:'other', name, unitPrice:amt, qty, attributedCastId:null, createdAt:Date.now()};
+  }
+  s.items.push(item); save(); closeModal(); renderSession(sid);
+}
+
+function closeSessionModalFn(sid){
+  const staffOpts = activeStaff().map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  openModal(`
+    <h3>会計確定 <span class="x" data-action="closeModal">&times;</span></h3>
+    <label>支払い方法</label>
+    <div class="chipsel">
+      <span class="chip on" data-role="paym" data-id="cash">現金</span>
+      <span class="chip" data-role="paym" data-id="card">カード</span>
+    </div>
+    <label>確認スタッフ（不正防止のため必須）</label>
+    <select id="mConfirmer"><option value="">選択してください</option>${staffOpts}</select>
+    <div class="btnrow"><button class="btn primary block" data-action="confirmCloseSession" data-sid="${sid}">この内容で確定する</button></div>
+  `);
+  document.getElementById('modal').addEventListener('click',(e)=>{
+    const chip = e.target.closest('.chip[data-role="paym"]');
+    if(chip){ document.querySelectorAll('.chip[data-role="paym"]').forEach(c=>c.classList.remove('on')); chip.classList.add('on'); }
+  });
+}
+function confirmCloseSession(sid){
+  const confirmer = document.getElementById('mConfirmer').value;
+  if(!confirmer){ toast('確認スタッフを選択してください'); return; }
+  const payChip = document.querySelector('.chip[data-role="paym"].on');
+  const s = state.sessions.find(x=>x.id===sid);
+  s.status='closed'; s.closeTime=Date.now();
+  s.paymentMethod = payChip? payChip.dataset.id:'cash';
+  s.confirmedByStaffId = confirmer;
+  s.total = sessionTotal(s);
+  save(); closeModal();
+  ui.sessionId=null; ui.tab='floor'; renderFloor();
+  toast('会計を確定しました');
+}
+
+/* ---------- MENU (plans / products / ranks) ---------- */
+function renderMenu(){
+  document.getElementById('app').innerHTML = `
+    <h2 class="viewtitle">メニュー・料金設定</h2>
+    <div class="section">
+      <div class="sectitle">セットプラン <button class="btn sm" data-action="editPlan"><span>＋追加</span></button></div>
+      <div class="list">${state.setPlans.map(p=>`
+        <div class="row">
+          <div class="rmain"><div class="rtitle">${esc(p.name)}</div>
+          <div class="rsub">${p.durationMin}分／延長${p.extensionMin}分 ${yen(p.extensionPrice)}／料金パターン${p.rows.length}件</div></div>
+          <button class="btn sm ghost" data-action="editPlan" data-id="${p.id}">編集</button>
+          <button class="btn sm danger" data-action="deletePlan" data-id="${p.id}">削除</button>
+        </div>`).join('') || '<div class="empty-hint">プランがありません</div>'}</div>
+    </div>
+    <div class="section">
+      <div class="sectitle">商品（ボトル・ドリンク等） <button class="btn sm" data-action="editProduct"><span>＋追加</span></button></div>
+      <div class="list">${state.products.map(p=>`
+        <div class="row">
+          <div class="rmain"><div class="rtitle">${esc(p.name)}</div>
+          <div class="rsub">${catLabel(p.category)}${p.backEligible?'／バック対象':''}</div></div>
+          <div class="ramt">${yen(p.price)}</div>
+          <button class="btn sm ghost" data-action="editProduct" data-id="${p.id}">編集</button>
+          <button class="btn sm danger" data-action="deleteProduct" data-id="${p.id}">削除</button>
+        </div>`).join('') || '<div class="empty-hint">商品がありません</div>'}</div>
+    </div>
+    <div class="section">
+      <div class="sectitle">指名料ランク <button class="btn sm" data-action="editRank"><span>＋追加</span></button></div>
+      <div class="list">${state.nominationRanks.map(r=>`
+        <div class="row">
+          <div class="rmain"><div class="rtitle">${esc(r.name)}</div></div>
+          <div class="ramt">${yen(r.fee)}</div>
+          <button class="btn sm ghost" data-action="editRank" data-id="${r.id}">編集</button>
+          <button class="btn sm danger" data-action="deleteRank" data-id="${r.id}">削除</button>
+        </div>`).join('') || '<div class="empty-hint">ランクがありません</div>'}</div>
+    </div>
+  `;
+}
+function catLabel(c){ return {bottle:'ボトル',drink:'ドリンク',other:'その他'}[c]||c; }
+
+function editPlanModal(id){
+  const p = id? planById(id) : {id:uid('pl'),name:'',durationMin:60,extensionMin:30,extensionPrice:5000,rows:[]};
+  const rowsHtml = p.rows.map((r,i)=>`
+    <div class="row" data-rowidx="${i}">
+      <div class="rmain rsub">${r.minGuests}〜${r.maxGuests}名／担当${r.minCast}〜${r.maxCast}名 → ${yen(r.price)}</div>
+      <button class="btn sm danger" data-action="removePlanRow" data-idx="${i}">削除</button>
+    </div>`).join('') || '<div class="empty-hint">料金パターンなし</div>';
+  openModal(`
+    <h3>セットプラン ${id?'編集':'追加'} <span class="x" data-action="closeModal">&times;</span></h3>
+    <label>プラン名</label><input id="fName" value="${escAttr(p.name)}">
+    <div class="formgrid">
+      <div><label>基本時間(分)</label><input id="fDur" type="number" value="${p.durationMin}"></div>
+      <div><label>延長単位(分)</label><input id="fExtMin" type="number" value="${p.extensionMin}"></div>
+    </div>
+    <label>延長料金</label><input id="fExtPrice" type="number" value="${p.extensionPrice}">
+    <div class="sectitle" style="margin-top:14px">料金パターン（人数・担当人数ごとの料金）</div>
+    <div class="list" id="rowsList">${rowsHtml}</div>
+    <div class="formgrid" style="margin-top:10px">
+      <div><label>人数 下限</label><input id="rMinG" type="number" value="1"></div>
+      <div><label>人数 上限</label><input id="rMaxG" type="number" value="2"></div>
+      <div><label>担当 下限</label><input id="rMinC" type="number" value="1"></div>
+      <div><label>担当 上限</label><input id="rMaxC" type="number" value="1"></div>
+    </div>
+    <label>この条件の料金</label><input id="rPrice" type="number" value="8000">
+    <div class="btnrow"><button class="btn sm ghost block" data-action="addPlanRow" data-planid="${p.id}">パターンを追加</button></div>
+    <div class="btnrow">
+      <button class="btn primary block" data-action="savePlan" data-id="${p.id}">保存する</button>
+    </div>
+  `);
+  ui.editing.plan = p;
+}
+function addPlanRow(){
+  const p = ui.editing.plan;
+  p.rows.push({
+    minGuests:parseInt(document.getElementById('rMinG').value)||1,
+    maxGuests:parseInt(document.getElementById('rMaxG').value)||1,
+    minCast:parseInt(document.getElementById('rMinC').value)||1,
+    maxCast:parseInt(document.getElementById('rMaxC').value)||1,
+    price:parseInt(document.getElementById('rPrice').value)||0
+  });
+  editPlanModal(p.id && planById(p.id) ? p.id : null);
+  ui.editing.plan = p;
+  refreshPlanRowsList();
+}
+function refreshPlanRowsList(){
+  const p = ui.editing.plan;
+  document.getElementById('rowsList').innerHTML = p.rows.map((r,i)=>`
+    <div class="row"><div class="rmain rsub">${r.minGuests}〜${r.maxGuests}名／担当${r.minCast}〜${r.maxCast}名 → ${yen(r.price)}</div>
+    <button class="btn sm danger" data-action="removePlanRow" data-idx="${i}">削除</button></div>`).join('') || '<div class="empty-hint">料金パターンなし</div>';
+}
+function removePlanRow(idx){ ui.editing.plan.rows.splice(idx,1); refreshPlanRowsList(); }
+function savePlan(id){
+  const p = ui.editing.plan;
+  p.name = document.getElementById('fName').value.trim()||'無名プラン';
+  p.durationMin = parseInt(document.getElementById('fDur').value)||60;
+  p.extensionMin = parseInt(document.getElementById('fExtMin').value)||30;
+  p.extensionPrice = parseInt(document.getElementById('fExtPrice').value)||0;
+  const exists = state.setPlans.find(x=>x.id===p.id);
+  if(!exists) state.setPlans.push(p);
+  save(); closeModal(); renderMenu(); toast('保存しました');
+}
+function deletePlan(id){ if(!confirm('このプランを削除しますか？')) return; state.setPlans = state.setPlans.filter(p=>p.id!==id); save(); renderMenu(); }
+
+function editProductModal(id){
+  const p = id? productById(id) : {id:uid('pr'),name:'',price:0,category:'bottle',backEligible:false};
+  openModal(`
+    <h3>商品 ${id?'編集':'追加'} <span class="x" data-action="closeModal">&times;</span></h3>
+    <label>商品名</label><input id="fName" value="${escAttr(p.name)}">
+    <label>価格</label><input id="fPrice" type="number" value="${p.price}">
+    <label>カテゴリ</label>
+    <select id="fCat">
+      <option value="bottle" ${p.category==='bottle'?'selected':''}>ボトル</option>
+      <option value="drink" ${p.category==='drink'?'selected':''}>ドリンク</option>
+      <option value="other" ${p.category==='other'?'selected':''}>その他</option>
+    </select>
+    <div class="chipsel" style="margin-top:10px"><span class="chip ${p.backEligible?'on':''}" id="fBack" data-action="toggleBack">担当キャストのバック対象にする</span></div>
+    <div class="btnrow"><button class="btn primary block" data-action="saveProduct" data-id="${p.id}" data-existing="${!!id}">保存する</button></div>
+  `);
+}
+function saveProduct(id, existing){
+  const name = document.getElementById('fName').value.trim()||'無名商品';
+  const price = parseInt(document.getElementById('fPrice').value)||0;
+  const category = document.getElementById('fCat').value;
+  const backEligible = document.getElementById('fBack').classList.contains('on');
+  if(existing==='true'){
+    const p = productById(id); p.name=name; p.price=price; p.category=category; p.backEligible=backEligible;
+  } else {
+    state.products.push({id, name, price, category, backEligible});
+  }
+  save(); closeModal(); renderMenu(); toast('保存しました');
+}
+function deleteProduct(id){ if(!confirm('この商品を削除しますか？')) return; state.products = state.products.filter(p=>p.id!==id); save(); renderMenu(); }
+
+function editRankModal(id){
+  const r = id? rankById(id) : {id:uid('rk'),name:'',fee:0};
+  openModal(`
+    <h3>指名料ランク ${id?'編集':'追加'} <span class="x" data-action="closeModal">&times;</span></h3>
+    <label>ランク名</label><input id="fName" value="${escAttr(r.name)}">
+    <label>指名料</label><input id="fFee" type="number" value="${r.fee}">
+    <div class="btnrow"><button class="btn primary block" data-action="saveRank" data-id="${r.id}" data-existing="${!!id}">保存する</button></div>
+  `);
+}
+function saveRank(id, existing){
+  const name = document.getElementById('fName').value.trim()||'無名ランク';
+  const fee = parseInt(document.getElementById('fFee').value)||0;
+  if(existing==='true'){ const r = rankById(id); r.name=name; r.fee=fee; }
+  else state.nominationRanks.push({id,name,fee});
+  save(); closeModal(); renderMenu(); toast('保存しました');
+}
+function deleteRank(id){ if(!confirm('このランクを削除しますか？')) return; state.nominationRanks = state.nominationRanks.filter(r=>r.id!==id); save(); renderMenu(); }
+
+/* ---------- STAFF ---------- */
+function renderStaff(){
+  document.getElementById('app').innerHTML = `
+    <h2 class="viewtitle">スタッフ管理 <button class="btn sm primary" data-action="editStaff"><span>＋追加</span></button></h2>
+    <div class="list">${state.staff.map(s=>`
+      <div class="row">
+        <div class="rmain">
+          <div class="rtitle">${esc(s.name)} ${s.active===false?'<span class="badge r">退店</span>':''}</div>
+          <div class="rsub">${roleLabel(s.role)}／時給${yen(s.hourlyWage)}／バック${s.backType==='percent'?(s.backValue+'%'):yen(s.backValue)+'(1件)'}${s.nominationRankId?'／'+esc(rankById(s.nominationRankId)?.name||''):''}</div>
+        </div>
+        <button class="btn sm ghost" data-action="editStaff" data-id="${s.id}">編集</button>
+        <button class="btn sm" data-action="shiftModal" data-id="${s.id}">勤怠</button>
+      </div>`).join('') || '<div class="empty-hint">スタッフが登録されていません</div>'}</div>
+  `;
+}
+function roleLabel(r){ return {cast:'キャスト',boy:'ボーイ',manager:'マネージャー',other:'その他'}[r]||r; }
+function editStaffModal(id){
+  const s = id? staffById(id) : {id:uid('st'),name:'',role:'cast',hourlyWage:1500,backType:'percent',backValue:50,nominationRankId:'',phone:'',address:'',active:true};
+  const rankOpts = `<option value="">なし</option>` + state.nominationRanks.map(r=>`<option value="${r.id}" ${s.nominationRankId===r.id?'selected':''}>${esc(r.name)}</option>`).join('');
+  openModal(`
+    <h3>スタッフ ${id?'編集':'登録'} <span class="x" data-action="closeModal">&times;</span></h3>
+    <label>名前</label><input id="fName" value="${escAttr(s.name)}">
+    <label>役職</label>
+    <select id="fRole">
+      <option value="cast" ${s.role==='cast'?'selected':''}>キャスト</option>
+      <option value="boy" ${s.role==='boy'?'selected':''}>ボーイ</option>
+      <option value="manager" ${s.role==='manager'?'selected':''}>マネージャー</option>
+      <option value="other" ${s.role==='other'?'selected':''}>その他</option>
+    </select>
+    <div class="formgrid">
+      <div><label>時給</label><input id="fWage" type="number" value="${s.hourlyWage}"></div>
+      <div><label>指名料ランク</label><select id="fRank">${rankOpts}</select></div>
+    </div>
+    <label>バック方式</label>
+    <div class="chipsel">
+      <span class="chip ${s.backType==='percent'?'on':''}" data-role="backtype" data-id="percent">％</span>
+      <span class="chip ${s.backType==='amount'?'on':''}" data-role="backtype" data-id="amount">金額(1件ごと)</span>
+    </div>
+    <label>バック値</label><input id="fBackVal" type="number" value="${s.backValue}">
+    <div class="formgrid">
+      <div><label>電話番号</label><input id="fPhone" value="${escAttr(s.phone||'')}"></div>
+      <div><label>住所</label><input id="fAddr" value="${escAttr(s.address||'')}"></div>
+    </div>
+    <div class="chipsel" style="margin-top:10px"><span class="chip ${s.active!==false?'on':''}" id="fActive" data-action="toggleActive">在籍中</span></div>
+    <div class="btnrow"><button class="btn primary block" data-action="saveStaff" data-id="${s.id}" data-existing="${!!id}">保存する</button></div>
+  `);
+  document.getElementById('modal').addEventListener('click',(e)=>{
+    const chip = e.target.closest('.chip[data-role="backtype"]');
+    if(chip){ document.querySelectorAll('.chip[data-role="backtype"]').forEach(c=>c.classList.remove('on')); chip.classList.add('on'); }
+  });
+}
+function saveStaff(id, existing){
+  const data = {
+    name: document.getElementById('fName').value.trim()||'無名',
+    role: document.getElementById('fRole').value,
+    hourlyWage: parseInt(document.getElementById('fWage').value)||0,
+    nominationRankId: document.getElementById('fRank').value||null,
+    backType: (document.querySelector('.chip[data-role="backtype"].on')||{}).dataset?.id || 'percent',
+    backValue: parseInt(document.getElementById('fBackVal').value)||0,
+    phone: document.getElementById('fPhone').value.trim(),
+    address: document.getElementById('fAddr').value.trim(),
+    active: document.getElementById('fActive').classList.contains('on')
+  };
+  if(existing==='true'){ Object.assign(staffById(id), data); }
+  else state.staff.push(Object.assign({id}, data));
+  save(); closeModal(); renderStaff(); toast('保存しました');
+}
+function shiftModalFn(staffId){
+  const s = staffById(staffId);
+  const today = new Date().toISOString().slice(0,10);
+  const shiftsForStaff = state.shifts.filter(x=>x.staffId===staffId).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+  openModal(`
+    <h3>${esc(s.name)} の勤怠 <span class="x" data-action="closeModal">&times;</span></h3>
+    <div class="formgrid">
+      <div><label>日付</label><input id="fDate" type="date" value="${today}"></div>
+      <div><label>送迎費(マイナス)</label><input id="fTransport" type="number" value="0"></div>
+    </div>
+    <div class="formgrid">
+      <div><label>出勤</label><input id="fIn" type="time" value="20:00"></div>
+      <div><label>退勤</label><input id="fOut" type="time" value="02:00"></div>
+    </div>
+    <div class="btnrow"><button class="btn primary block" data-action="saveShift" data-staffid="${staffId}">この日を記録する</button></div>
+    <div class="sectitle" style="margin-top:16px">直近の記録</div>
+    <div class="list">${shiftsForStaff.map(sh=>`
+      <div class="row"><div class="rmain"><div class="rtitle">${sh.date}</div><div class="rsub">${sh.clockIn}〜${sh.clockOut}／送迎${yen(sh.transportFee)}</div></div>
+      <button class="btn sm danger" data-action="deleteShift" data-id="${sh.id}" data-staffid="${staffId}">削除</button></div>`).join('') || '<div class="empty-hint">記録なし</div>'}</div>
+  `);
+}
+function saveShift(staffId){
+  const date = document.getElementById('fDate').value;
+  const clockIn = document.getElementById('fIn').value;
+  const clockOut = document.getElementById('fOut').value;
+  const transportFee = parseInt(document.getElementById('fTransport').value)||0;
+  if(!date||!clockIn||!clockOut){ toast('全て入力してください'); return; }
+  state.shifts.push({id:uid('sh'), staffId, date, clockIn, clockOut, transportFee});
+  save(); shiftModalFn(staffId); toast('記録しました');
+}
+function deleteShift(id, staffId){ state.shifts = state.shifts.filter(s=>s.id!==id); save(); shiftModalFn(staffId); }
+
+/* ---------- PAYROLL ---------- */
+function shiftHours(sh){
+  const [ih,im] = sh.clockIn.split(':').map(Number);
+  const [oh,om] = sh.clockOut.split(':').map(Number);
+  let start = ih*60+im, end = oh*60+om;
+  if(end<=start) end += 24*60;
+  return (end-start)/60;
+}
+function computePayroll(staffId, startDate, endDate){
+  const s = staffById(staffId);
+  const shifts = state.shifts.filter(x=>x.staffId===staffId && x.date>=startDate && x.date<=endDate);
+  const hours = shifts.reduce((sum,x)=>sum+shiftHours(x),0);
+  const wage = hours * s.hourlyWage;
+  const transport = shifts.reduce((sum,x)=>sum+(x.transportFee||0),0);
+  const closedSessions = state.sessions.filter(x=>x.status==='closed' && x.closeTime && dateStr(x.closeTime)>=startDate && dateStr(x.closeTime)<=endDate);
+  let backTotal=0, backCount=0;
+  closedSessions.forEach(sess=>{
+    (sess.items||[]).forEach(it=>{
+      if(it.attributedCastId===staffId){
+        backCount += it.qty;
+        backTotal += s.backType==='percent' ? it.unitPrice*it.qty*s.backValue/100 : s.backValue*it.qty;
+      }
+    });
+  });
+  return {hours, wage, transport, backTotal, backCount, net: wage+backTotal-transport};
+}
+function dateStr(ts){ const d=new Date(ts); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+
+function renderPayroll(){
+  const today = new Date().toISOString().slice(0,10);
+  const monthStart = today.slice(0,8)+'01';
+  const start = ui.payrollStart || monthStart;
+  const end = ui.payrollEnd || today;
+  const rows = activeStaff().map(s=>{
+    const r = computePayroll(s.id, start, end);
+    return `<div class="row">
+      <div class="rmain"><div class="rtitle">${esc(s.name)}</div>
+      <div class="rsub">稼働${r.hours.toFixed(1)}h／時給${yen(r.wage)}／バック${yen(r.backTotal)}(${r.backCount}件)／送迎-${yen(r.transport)}</div></div>
+      <div class="ramt">${yen(r.net)}</div>
+    </div>`;
+  }).join('') || '<div class="empty-hint">スタッフが登録されていません</div>';
+  document.getElementById('app').innerHTML = `
+    <h2 class="viewtitle">給与計算</h2>
+    <div class="formgrid" style="margin-bottom:14px">
+      <div><label>開始日</label><input id="pStart" type="date" value="${start}"></div>
+      <div><label>終了日</label><input id="pEnd" type="date" value="${end}"></div>
+    </div>
+    <button class="btn sm" data-action="applyPayrollRange" style="margin-bottom:14px">この期間で計算</button>
+    <div class="list">${rows}</div>
+  `;
+}
+function applyPayrollRange(){
+  ui.payrollStart = document.getElementById('pStart').value;
+  ui.payrollEnd = document.getElementById('pEnd').value;
+  renderPayroll();
+}
+
+/* ---------- DAILY SUMMARY ---------- */
+function renderDaily(){
+  const date = ui.dailyDate || new Date().toISOString().slice(0,10);
+  const sessions = state.sessions.filter(s=>s.status==='closed' && dateStr(s.closeTime)===date);
+  const byType = {};
+  let cash=0, card=0, expense=0;
+  const byTableCast = {};
+  sessions.forEach(s=>{
+    if(s.paymentMethod==='card') card += sessionTotal(s); else cash += sessionTotal(s);
+    (s.items||[]).forEach(it=>{
+      const key = typeLabel(it.type);
+      byType[key] = (byType[key]||0) + it.unitPrice*it.qty;
+      if(it.type==='extension'){} // set/extension are store revenue, not expense
+      const tb = tableById(s.tableId);
+      const label = (tb?tb.name:'?') + (it.attributedCastId? '／'+ (staffById(it.attributedCastId)?.name||'') : '');
+      byTableCast[label] = (byTableCast[label]||0) + it.unitPrice*it.qty;
+    });
+  });
+  const transportExpense = state.shifts.filter(x=>x.date===date).reduce((sum,x)=>sum+(x.transportFee||0),0);
+  const totalSales = cash+card;
+  const profit = totalSales - transportExpense;
+  document.getElementById('app').innerHTML = `
+    <h2 class="viewtitle">当日収支</h2>
+    <label>対象日</label><input id="dDate" type="date" value="${date}">
+    <button class="btn sm" data-action="applyDailyDate" style="margin:10px 0 16px">この日で表示</button>
+    <div class="statgrid">
+      <div class="stat"><div class="v">${yen(totalSales)}</div><div class="k">総売上</div></div>
+      <div class="stat"><div class="v">${yen(cash)}</div><div class="k">現金</div></div>
+      <div class="stat"><div class="v">${yen(card)}</div><div class="k">カード</div></div>
+      <div class="stat"><div class="v">${yen(profit)}</div><div class="k">粗利益(送迎費差引)</div></div>
+    </div>
+    <div class="section">
+      <div class="sectitle">売上項目別内訳</div>
+      <div class="list">${Object.entries(byType).map(([k,v])=>`<div class="row"><div class="rmain rtitle">${k}</div><div class="ramt">${yen(v)}</div></div>`).join('')||'<div class="empty-hint">データなし</div>'}</div>
+    </div>
+    <div class="section">
+      <div class="sectitle">卓・キャスト別内訳</div>
+      <div class="list">${Object.entries(byTableCast).map(([k,v])=>`<div class="row"><div class="rmain rtitle">${esc(k)}</div><div class="ramt">${yen(v)}</div></div>`).join('')||'<div class="empty-hint">データなし</div>'}</div>
+    </div>
+    <div class="section">
+      <div class="sectitle">確定履歴（確認者付き）</div>
+      <div class="list">${sessions.map(s=>{
+        const tb=tableById(s.tableId);
+        return `<div class="row"><div class="rmain"><div class="rtitle">${esc(tb?tb.name:'?')}卓</div>
+        <div class="rsub">確認: ${esc(staffById(s.confirmedByStaffId)?.name||'-')}／${new Date(s.closeTime).toLocaleTimeString('ja-JP',{hour12:false})}</div></div>
+        <div class="ramt">${yen(sessionTotal(s))}</div></div>`;
+      }).join('')||'<div class="empty-hint">この日の確定データがありません</div>'}</div>
+    </div>
+  `;
+}
+function typeLabel(t){ return {set:'セット料金',extension:'延長料金',nomination:'指名料',drink:'ドリンク',bottle:'ボトル/商品',other:'その他'}[t]||t; }
+function applyDailyDate(){ ui.dailyDate = document.getElementById('dDate').value; renderDaily(); }
+
+/* ---------- SETTINGS ---------- */
+function renderSettings(){
+  document.getElementById('app').innerHTML = `
+    <h2 class="viewtitle">設定</h2>
+    <div class="section">
+      <div class="sectitle">店舗情報</div>
+      <label>店名（メイン）</label><input id="sName" value="${escAttr(state.settings.storeName)}">
+      <label>店名（サブ）</label><input id="sSub" value="${escAttr(state.settings.storeSub)}">
+      <label>デフォルト指名料（ランク未設定キャスト用）</label><input id="sFee" type="number" value="${state.settings.defaultNominationFee}">
+      <div class="btnrow"><button class="btn primary" data-action="saveSettings">保存する</button></div>
+    </div>
+    <div class="section">
+      <div class="sectitle">卓（テーブル）管理 <button class="btn sm" data-action="editTable"><span>＋追加</span></button></div>
+      <div class="list">${state.tables.map(t=>`
+        <div class="row"><div class="rmain"><div class="rtitle">${esc(t.name)}</div><div class="rsub">定員${t.capacity}名</div></div>
+        <button class="btn sm ghost" data-action="editTable" data-id="${t.id}">編集</button>
+        <button class="btn sm danger" data-action="deleteTable" data-id="${t.id}">削除</button></div>`).join('')||'<div class="empty-hint">卓がありません</div>'}</div>
+    </div>
+    <div class="section">
+      <div class="sectitle">データのバックアップ</div>
+      <p class="small">端末変更やアプリの誤削除に備えて、定期的にバックアップファイルを保存してください。</p>
+      <div class="btnrow">
+        <button class="btn primary" data-action="exportData">バックアップを書き出す</button>
+        <label class="btn ghost" style="position:relative;overflow:hidden">
+          復元する（ファイル選択）
+          <input type="file" id="importFile" accept="application/json" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+        </label>
+      </div>
+    </div>
+    <div class="section">
+      <div class="sectitle">初期化</div>
+      <button class="btn danger" data-action="resetAll">全データを削除して初期化</button>
+    </div>
+  `;
+  document.getElementById('importFile').addEventListener('change', handleImportFile);
+}
+function saveSettingsFn(){
+  state.settings.storeName = document.getElementById('sName').value.trim()||'CLUB STELLA';
+  state.settings.storeSub = document.getElementById('sSub').value.trim();
+  state.settings.defaultNominationFee = parseInt(document.getElementById('sFee').value)||0;
+  save(); applyHeader(); toast('保存しました');
+}
+function editTableModal(id){
+  const t = id? tableById(id) : {id:uid('tb'), name:'', capacity:4};
+  openModal(`
+    <h3>卓 ${id?'編集':'追加'} <span class="x" data-action="closeModal">&times;</span></h3>
+    <label>卓名</label><input id="fName" value="${escAttr(t.name)}">
+    <label>定員</label><input id="fCap" type="number" value="${t.capacity}">
+    <div class="btnrow"><button class="btn primary block" data-action="saveTable" data-id="${t.id}" data-existing="${!!id}">保存する</button></div>
+  `);
+}
+function saveTable(id, existing){
+  const name = document.getElementById('fName').value.trim()||'卓';
+  const capacity = parseInt(document.getElementById('fCap').value)||1;
+  if(existing==='true'){ const t=tableById(id); t.name=name; t.capacity=capacity; }
+  else state.tables.push({id,name,capacity});
+  save(); closeModal(); renderSettings(); toast('保存しました');
+}
+function deleteTable(id){
+  if(openSessionForTable(id)){ toast('会計中の卓は削除できません'); return; }
+  if(!confirm('この卓を削除しますか？')) return;
+  state.tables = state.tables.filter(t=>t.id!==id); save(); renderSettings();
+}
+function exportData(){
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  a.href = url;
+  a.download = `club-stella-backup-${now.getFullYear()}${pad2(now.getMonth()+1)}${pad2(now.getDate())}-${pad2(now.getHours())}${pad2(now.getMinutes())}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('バックアップを書き出しました');
+}
+function handleImportFile(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const parsed = JSON.parse(reader.result);
+      if(!confirm('現在のデータを上書きして復元します。よろしいですか？')) return;
+      state = parsed; save(); applyHeader(); renderCurrentTab();
+      toast('復元しました');
+    }catch(err){ toast('ファイルの読み込みに失敗しました'); }
+  };
+  reader.readAsText(file);
+}
+function resetAll(){
+  if(!confirm('本当に全データを削除しますか？この操作は取り消せません。')) return;
+  if(!confirm('最終確認：全ての会計・給与・設定データが消えます。よろしいですか？')) return;
+  state = defaultState(); save(); applyHeader(); renderCurrentTab();
+  toast('初期化しました');
+}
+
+/* ---------- misc ---------- */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escAttr(s){ return esc(s); }
+function applyHeader(){
+  document.getElementById('storeNameHdr').innerHTML = esc(state.settings.storeName)+'<small>'+esc(state.settings.storeSub)+'</small>';
+}
+
+function renderCurrentTab(){
+  renderNav();
+  if(ui.sessionId){ renderSession(ui.sessionId); return; }
+  ({floor:renderFloor, menu:renderMenu, staff:renderStaff, payroll:renderPayroll, daily:renderDaily, settings:renderSettings}[ui.tab]||renderFloor)();
+}
+
+/* ---------- Event delegation ---------- */
+const ACTIONS = {
+  tab:(el)=>{ ui.tab = el.dataset.tab; ui.sessionId=null; renderCurrentTab(); },
+  backToFloor:()=>{ ui.sessionId=null; ui.tab='floor'; renderCurrentTab(); },
+  openTable:(el)=> openTableModal(el.dataset.id),
+  confirmOpenTable:(el)=> confirmOpenTable(el.dataset.tableid),
+  openSession:(el)=>{ ui.sessionId = el.dataset.id; renderCurrentTab(); },
+  closeModal:()=> closeModal(),
+  extendSession:(el)=> extendSession(el.dataset.sid),
+  addItem:(el)=> addItemModal(el.dataset.sid, el.dataset.type),
+  confirmAddItem:(el)=> confirmAddItem(el.dataset.sid, el.dataset.type),
+  removeItem:(el)=> removeItem(el.dataset.sid, el.dataset.iid),
+  closeSessionModal:(el)=> closeSessionModalFn(el.dataset.sid),
+  confirmCloseSession:(el)=> confirmCloseSession(el.dataset.sid),
+  editPlan:(el)=> editPlanModal(el.dataset.id||null),
+  addPlanRow:()=> addPlanRow(),
+  removePlanRow:(el)=> removePlanRow(parseInt(el.dataset.idx)),
+  savePlan:(el)=> savePlan(el.dataset.id),
+  deletePlan:(el)=> deletePlan(el.dataset.id),
+  editProduct:(el)=> editProductModal(el.dataset.id||null),
+  toggleBack:(el)=> el.classList.toggle('on'),
+  saveProduct:(el)=> saveProduct(el.dataset.id, el.dataset.existing),
+  deleteProduct:(el)=> deleteProduct(el.dataset.id),
+  editRank:(el)=> editRankModal(el.dataset.id||null),
+  saveRank:(el)=> saveRank(el.dataset.id, el.dataset.existing),
+  deleteRank:(el)=> deleteRank(el.dataset.id),
+  editStaff:(el)=> editStaffModal(el.dataset.id||null),
+  toggleActive:(el)=> el.classList.toggle('on'),
+  saveStaff:(el)=> saveStaff(el.dataset.id, el.dataset.existing),
+  shiftModal:(el)=> shiftModalFn(el.dataset.id),
+  saveShift:(el)=> saveShift(el.dataset.staffid),
+  deleteShift:(el)=> deleteShift(el.dataset.id, el.dataset.staffid),
+  applyPayrollRange:()=> applyPayrollRange(),
+  applyDailyDate:()=> applyDailyDate(),
+  saveSettings:()=> saveSettingsFn(),
+  editTable:(el)=> editTableModal(el.dataset.id||null),
+  saveTable:(el)=> saveTable(el.dataset.id, el.dataset.existing),
+  deleteTable:(el)=> deleteTable(el.dataset.id),
+  exportData:()=> exportData(),
+  resetAll:()=> resetAll()
+};
+document.addEventListener('click',(e)=>{
+  const el = e.target.closest('[data-action]');
+  if(!el) return;
+  const fn = ACTIONS[el.dataset.action];
+  if(fn) fn(el, e);
+});
+
+/* ---------- init ---------- */
+applyHeader();
+renderCurrentTab();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
