@@ -95,6 +95,9 @@ h2.viewtitle .sub{font-size:12px;color:var(--ink3);font-weight:500}
 .row .rtitle{font-weight:700;font-size:14.5px}
 .row .rsub{font-size:12px;color:var(--ink3);margin-top:2px}
 .row .ramt{font-family:'DM Mono',monospace;font-weight:600;font-size:15px;white-space:nowrap}
+.row .ractions{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.rankrow{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--bd);border-radius:var(--r2);padding:11px 13px}
+.rankrow .rk{font-family:'DM Mono',monospace;font-weight:700;color:var(--gold2);width:22px;text-align:center;flex:none}
 .section{margin-bottom:22px}
 .sectitle{font-size:13px;font-weight:700;color:var(--gold2);margin-bottom:8px;letter-spacing:.3px;display:flex;justify-content:space-between;align-items:center}
 .empty-hint{color:var(--ink3);font-size:13px;text-align:center;padding:22px 10px;border:1px dashed var(--bd2);border-radius:var(--r2)}
@@ -187,7 +190,8 @@ function defaultState(){
     ],
     staff:[],
     shifts:[],
-    sessions:[]
+    sessions:[],
+    payouts:[]
   };
 }
 
@@ -201,6 +205,7 @@ function load(){
       const parsed = JSON.parse(raw);
       const d = defaultState();
       parsed.settings = Object.assign({}, d.settings, parsed.settings||{});
+      parsed.payouts = parsed.payouts || [];
       return parsed;
     }
   }catch(e){ console.error('load failed', e); }
@@ -967,21 +972,38 @@ function computePayroll(staffId, startDate, endDate){
 }
 function dateStr(ts){ const d=new Date(ts); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
 
+function findPayout(staffId, start, end){
+  return state.payouts.find(p=>p.staffId===staffId && p.periodStart===start && p.periodEnd===end);
+}
+function payrollSubnav(){
+  return `<div class="btnrow" style="margin-bottom:14px">
+    <button class="btn sm ${ui.payrollView!=='ranking'?'primary':'ghost'}" data-action="payrollView" data-view="daily">日次支給</button>
+    <button class="btn sm ${ui.payrollView==='ranking'?'primary':'ghost'}" data-action="payrollView" data-view="ranking">期間ランキング</button>
+  </div>`;
+}
 function renderPayroll(){
+  if(ui.payrollView==='ranking'){ renderPayrollRanking(); return; }
   const today = new Date().toISOString().slice(0,10);
-  const monthStart = today.slice(0,8)+'01';
-  const start = ui.payrollStart || monthStart;
+  const start = ui.payrollStart || today;
   const end = ui.payrollEnd || today;
   const rows = activeStaff().map(s=>{
     const r = computePayroll(s.id, start, end);
+    const payout = findPayout(s.id, start, end);
     return `<div class="row">
-      <div class="rmain"><div class="rtitle">${esc(s.name)}</div>
-      <div class="rsub">稼働${r.hours.toFixed(1)}h／時給${yen(r.wage)}／バック${yen(r.backTotal)}(${r.backCount}件)／送迎-${yen(r.transport)}</div></div>
-      <div class="ramt">${yen(r.net)}</div>
+      <div class="rmain"><div class="rtitle">${esc(s.name)} ${payout?'<span class="badge g">支給済み</span>':''}</div>
+      <div class="rsub">稼働${r.hours.toFixed(1)}h／時給${yen(r.wage)}／バック${yen(r.backTotal)}(${r.backCount}件)／送迎-${yen(r.transport)}</div>
+      ${payout?`<div class="rsub">確認: ${esc(staffById(payout.confirmedByStaffId)?.name||'-')}／${new Date(payout.confirmedAt).toLocaleString('ja-JP',{hour12:false})}</div>`:''}</div>
+      <div class="ractions">
+        <div class="ramt">${yen(r.net)}</div>
+        ${payout
+          ? `<button class="btn sm danger" data-action="cancelPayout" data-id="${payout.id}">支給取消</button>`
+          : `<button class="btn sm primary" data-action="payoutModal" data-staffid="${s.id}" data-start="${start}" data-end="${end}" data-amount="${Math.round(r.net)}">支給済みにする</button>`}
+      </div>
     </div>`;
   }).join('') || '<div class="empty-hint">スタッフが登録されていません</div>';
   document.getElementById('app').innerHTML = `
     <h2 class="viewtitle">給与計算</h2>
+    ${payrollSubnav()}
     <div class="formgrid" style="margin-bottom:14px">
       <div><label>開始日</label><input id="pStart" type="date" value="${start}"></div>
       <div><label>終了日</label><input id="pEnd" type="date" value="${end}"></div>
@@ -994,6 +1016,85 @@ function applyPayrollRange(){
   ui.payrollStart = document.getElementById('pStart').value;
   ui.payrollEnd = document.getElementById('pEnd').value;
   renderPayroll();
+}
+function setPayrollView(view){ ui.payrollView = view; renderPayroll(); }
+
+function payoutModalFn(staffId, start, end, amount){
+  const staffOpts = activeStaff().map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  openModal(`
+    <h3>支給済みにする <span class="x" data-action="closeModal">&times;</span></h3>
+    <p class="small">${esc(staffById(staffId).name)}さんに ${start===end?start+'分':start+'〜'+end} の給与 ${yen(amount)} を支給したことを記録します。</p>
+    <label>確認スタッフ（不正防止のため必須）</label>
+    <select id="mConfirmer"><option value="">選択してください</option>${staffOpts}</select>
+    <div class="btnrow"><button class="btn primary block" data-action="confirmPayout" data-staffid="${staffId}" data-start="${start}" data-end="${end}" data-amount="${amount}">支給済みとして記録する</button></div>
+  `);
+}
+function confirmPayoutFn(staffId, start, end, amount){
+  const confirmer = document.getElementById('mConfirmer').value;
+  if(!confirmer){ toast('確認スタッフを選択してください'); return; }
+  const r = computePayroll(staffId, start, end);
+  state.payouts.push({
+    id: uid('po'), staffId, periodStart: start, periodEnd: end,
+    amount: parseInt(amount)||0, hours:r.hours, wage:r.wage, backTotal:r.backTotal, transport:r.transport,
+    confirmedByStaffId: confirmer, confirmedAt: Date.now()
+  });
+  save(); closeModal(); renderPayroll(); toast('支給済みとして記録しました');
+}
+function cancelPayoutFn(id){
+  if(!confirm('この支給記録を取り消しますか？')) return;
+  state.payouts = state.payouts.filter(p=>p.id!==id);
+  save(); renderPayroll();
+}
+
+/* ---------- CAST RANKING ---------- */
+function computeCastStats(staffId, start, end){
+  const closedSessions = state.sessions.filter(x=>x.status==='closed' && x.closeTime && dateStr(x.closeTime)>=start && dateStr(x.closeTime)<=end);
+  let sales=0, nominationCount=0, drinkCount=0, tableCount=0;
+  closedSessions.forEach(sess=>{
+    if((sess.castIds||[]).includes(staffId)) tableCount++;
+    (sess.items||[]).forEach(it=>{
+      if(it.attributedCastId===staffId){
+        sales += it.unitPrice*it.qty;
+        if(it.type==='nomination') nominationCount += it.qty;
+        if(it.type==='drink') drinkCount += it.qty;
+      }
+    });
+  });
+  const nominationRate = tableCount>0 ? (nominationCount/tableCount*100) : 0;
+  return {sales, nominationCount, drinkCount, tableCount, nominationRate};
+}
+function renderPayrollRanking(){
+  const today = new Date().toISOString().slice(0,10);
+  const monthStart = today.slice(0,8)+'01';
+  const start = ui.rankStart || monthStart;
+  const end = ui.rankEnd || today;
+  const rows = activeCast().map(s=>({s, stat: computeCastStats(s.id, start, end)}))
+    .sort((a,b)=> b.stat.sales - a.stat.sales);
+  const rowsHtml = rows.map((r,i)=>`
+    <div class="rankrow">
+      <div class="rk">${i+1}</div>
+      <div class="rmain">
+        <div class="rtitle">${esc(r.s.name)}</div>
+        <div class="rsub">接客${r.stat.tableCount}卓／指名${r.stat.nominationCount}本(指名率${r.stat.nominationRate.toFixed(0)}%)／ドリンク${r.stat.drinkCount}本</div>
+      </div>
+      <div class="ramt">${yen(r.stat.sales)}</div>
+    </div>`).join('') || '<div class="empty-hint">キャストが登録されていません</div>';
+  document.getElementById('app').innerHTML = `
+    <h2 class="viewtitle">給与計算</h2>
+    ${payrollSubnav()}
+    <div class="formgrid" style="margin-bottom:14px">
+      <div><label>開始日</label><input id="rkStart" type="date" value="${start}"></div>
+      <div><label>終了日</label><input id="rkEnd" type="date" value="${end}"></div>
+    </div>
+    <button class="btn sm" data-action="applyRankRange" style="margin-bottom:14px">この期間で集計</button>
+    <p class="small" style="margin-bottom:10px">個人売上（指名料・ドリンク等の担当分）の多い順</p>
+    <div class="list">${rowsHtml}</div>
+  `;
+}
+function applyRankRange(){
+  ui.rankStart = document.getElementById('rkStart').value;
+  ui.rankEnd = document.getElementById('rkEnd').value;
+  renderPayrollRanking();
 }
 
 /* ---------- DAILY SUMMARY ---------- */
@@ -1193,6 +1294,11 @@ const ACTIONS = {
   saveShift:(el)=> saveShift(el.dataset.staffid),
   deleteShift:(el)=> deleteShift(el.dataset.id, el.dataset.staffid),
   applyPayrollRange:()=> applyPayrollRange(),
+  payrollView:(el)=> setPayrollView(el.dataset.view),
+  payoutModal:(el)=> payoutModalFn(el.dataset.staffid, el.dataset.start, el.dataset.end, el.dataset.amount),
+  confirmPayout:(el)=> confirmPayoutFn(el.dataset.staffid, el.dataset.start, el.dataset.end, el.dataset.amount),
+  cancelPayout:(el)=> cancelPayoutFn(el.dataset.id),
+  applyRankRange:()=> applyRankRange(),
   applyDailyDate:()=> applyDailyDate(),
   saveSettings:()=> saveSettingsFn(),
   editTable:(el)=> editTableModal(el.dataset.id||null),
