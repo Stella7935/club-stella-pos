@@ -409,6 +409,7 @@ function renderSession(sessionId){
   if(!s){ ui.sessionId=null; ui.tab='floor'; renderFloor(); return; }
   const tb = tableById(s.tableId);
   const castNames = s.castIds.map(id=>staffById(id)?.name).filter(Boolean).join('・')||'未設定';
+  const mergedChildren = state.sessions.filter(x=>x.mergedInto===s.id);
   const itemsHtml = (s.items||[]).map(it=>{
     const cast = it.attributedCastId ? staffById(it.attributedCastId) : null;
     return `<div class="row">
@@ -427,7 +428,9 @@ function renderSession(sessionId){
     <div class="timerwrap" id="timerBox">
       <div class="lbl">${s.status==='open'?'セット残り時間':'滞在時間'}</div>
       <div class="timerbig" id="timerText">--:--</div>
-      <div class="small" style="margin-top:6px">人数 ${s.guestCount}名 ／ 担当 ${esc(castNames)} ／ ${s.payTiming==='prepay'?'先払い':'後払い'}</div>
+      <div class="small" style="margin-top:6px">人数 ${s.guestCount}名 ／ 担当 ${esc(castNames)} ／ ${s.payTiming==='prepay'?'先払い':'後払い'}
+      ${s.status==='open'?` ／ <button class="btn sm ghost" data-action="editGuests" data-sid="${s.id}" style="padding:3px 9px">人数・担当を変更</button>`:''}</div>
+      ${mergedChildren.length?`<div class="small" style="margin-top:6px">合算中: ${mergedChildren.map(c=>esc(tableById(c.tableId).name)+'卓').join('・')}</div>`:''}
     </div>
     ${s.status==='open'?`<div class="btnrow">
       <button class="btn" data-action="extendSession" data-sid="${s.id}">＋延長</button>
@@ -435,6 +438,7 @@ function renderSession(sessionId){
       <button class="btn" data-action="addItem" data-type="drink" data-sid="${s.id}">＋キャストドリンク</button>
       <button class="btn" data-action="addItem" data-type="bottle" data-sid="${s.id}">＋ボトル/商品</button>
       <button class="btn" data-action="addItem" data-type="free" data-sid="${s.id}">＋自由入力</button>
+      <button class="btn wine" data-action="mergeTableModal" data-sid="${s.id}">他の卓を合算</button>
     </div>`:''}
     <div class="section" style="margin-top:16px">
       <div class="sectitle">明細</div>
@@ -482,6 +486,77 @@ function extendSession(sid){
   s._alert = {};
   s.items.push({id:uid('it'), type:'extension', name:`延長(${plan.extensionMin}分)`, unitPrice:plan.extensionPrice, qty:1, attributedCastId:null, createdAt:Date.now()});
   save(); renderSession(sid); toast('延長しました');
+}
+function editGuestsModal(sid){
+  const s = state.sessions.find(x=>x.id===sid);
+  const setItem = s.items.find(it=>it.type==='set');
+  const castOpts = activeCast().map(c=>`<span class="chip ${s.castIds.includes(c.id)?'on':''}" data-role="cast" data-id="${c.id}">${esc(c.name)}</span>`).join('') || '<span class="small">キャスト未登録です</span>';
+  openModal(`
+    <h3>人数・担当の変更 <span class="x" data-action="closeModal">&times;</span></h3>
+    <label>人数</label>
+    <input type="number" id="mGuest" min="1" value="${s.guestCount}" inputmode="numeric">
+    <label>担当キャスト（複数選択可）</label>
+    <div class="chipsel" id="mCastSel">${castOpts}</div>
+    <label>セット料金（変更内容に応じて自動再計算・手動修正可）</label>
+    <input type="number" id="mPrice" value="${setItem?setItem.unitPrice:0}" inputmode="numeric">
+    <div class="chipsel" style="margin-top:10px"><span class="chip on" id="mApplyPrice" data-action="toggleBack">上記の料金を明細の「セット料金」に反映する</span></div>
+    <div class="btnrow"><button class="btn primary block" data-action="confirmEditGuests" data-sid="${sid}">変更を保存する</button></div>
+  `);
+  const recalc = ()=>{
+    const g = parseInt(document.getElementById('mGuest').value)||1;
+    const castCount = document.querySelectorAll('#mCastSel .chip.on').length;
+    const price = findSetPrice(s.setPlanId, g, castCount||1);
+    if(price!=null) document.getElementById('mPrice').value = price;
+  };
+  document.getElementById('mGuest').addEventListener('input', recalc);
+  document.getElementById('mCastSel').addEventListener('click', (e)=>{
+    const chip = e.target.closest('.chip'); if(!chip) return;
+    chip.classList.toggle('on'); recalc();
+  });
+}
+function confirmEditGuests(sid){
+  const s = state.sessions.find(x=>x.id===sid);
+  s.guestCount = parseInt(document.getElementById('mGuest').value)||1;
+  s.castIds = [...document.querySelectorAll('#mCastSel .chip.on')].map(c=>c.dataset.id);
+  const applyPrice = document.getElementById('mApplyPrice').classList.contains('on');
+  if(applyPrice){
+    const price = parseInt(document.getElementById('mPrice').value)||0;
+    const setItem = s.items.find(it=>it.type==='set');
+    if(setItem) setItem.unitPrice = price;
+  }
+  save(); closeModal(); renderSession(sid); toast('人数・担当を変更しました');
+}
+function mergeTableModal(sid){
+  const s = state.sessions.find(x=>x.id===sid);
+  const others = state.sessions.filter(x=>x.status==='open' && x.id!==sid);
+  const optsHtml = others.map(o=>{
+    const otb = tableById(o.tableId);
+    return `<div class="row">
+      <div class="rmain"><div class="rtitle">${esc(otb.name)}卓</div><div class="rsub">${o.guestCount}名／${yen(sessionTotal(o))}</div></div>
+      <button class="btn sm primary" data-action="confirmMergeTable" data-fromid="${o.id}" data-intoid="${sid}">合算する</button>
+    </div>`;
+  }).join('') || '<div class="empty-hint">合算できる卓（現在オープン中の他の卓）がありません</div>';
+  openModal(`
+    <h3>他の卓を合算 <span class="x" data-action="closeModal">&times;</span></h3>
+    <p class="small">選んだ卓の明細をこの卓（${esc(tableById(s.tableId).name)}卓）にまとめます。選んだ卓は空席に戻ります（会計は分かれません）。</p>
+    <div class="list">${optsHtml}</div>
+  `);
+}
+function confirmMergeTable(fromId, intoId){
+  const from = state.sessions.find(x=>x.id===fromId);
+  const into = state.sessions.find(x=>x.id===intoId);
+  if(!from || !into) return;
+  const fromTable = tableById(from.tableId);
+  from.items.forEach(it=>{
+    into.items.push(Object.assign({}, it, {id:uid('it'), name:`[${fromTable.name}卓より] ${it.name}`}));
+  });
+  into.guestCount += from.guestCount;
+  from.castIds.forEach(id=>{ if(!into.castIds.includes(id)) into.castIds.push(id); });
+  from.status = 'merged';
+  from.mergedInto = into.id;
+  from.mergedAt = Date.now();
+  save(); closeModal(); renderSession(into.id);
+  toast(`${fromTable.name}卓を合算しました`);
 }
 function removeItem(sid,iid){
   const s = state.sessions.find(x=>x.id===sid);
@@ -1090,6 +1165,10 @@ const ACTIONS = {
   openSession:(el)=>{ ui.sessionId = el.dataset.id; renderCurrentTab(); },
   closeModal:()=> closeModal(),
   extendSession:(el)=> extendSession(el.dataset.sid),
+  editGuests:(el)=> editGuestsModal(el.dataset.sid),
+  confirmEditGuests:(el)=> confirmEditGuests(el.dataset.sid),
+  mergeTableModal:(el)=> mergeTableModal(el.dataset.sid),
+  confirmMergeTable:(el)=> confirmMergeTable(el.dataset.fromid, el.dataset.intoid),
   addItem:(el)=> addItemModal(el.dataset.sid, el.dataset.type),
   confirmAddItem:(el)=> confirmAddItem(el.dataset.sid, el.dataset.type),
   removeItem:(el)=> removeItem(el.dataset.sid, el.dataset.iid),
