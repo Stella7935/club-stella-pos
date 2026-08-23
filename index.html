@@ -196,24 +196,66 @@ function defaultState(){
   };
 }
 
-let state = load();
+let state = defaultState();
 let ui = { tab:'floor', sessionId:null, editing:{} };
 
-function load(){
+/* ---------- Storage (IndexedDB, with one-time migration from old localStorage data) ---------- */
+const IDB_NAME = 'clubStellaDB';
+const IDB_STORE = 'kv';
+const IDB_KEY = 'appState';
+let _dbPromise = null;
+function openIdb(){
+  if(_dbPromise) return _dbPromise;
+  _dbPromise = new Promise((resolve, reject)=>{
+    if(!window.indexedDB){ reject(new Error('IndexedDB unsupported')); return; }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = ()=>{ req.result.createObjectStore(IDB_STORE); };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+  return _dbPromise;
+}
+function idbGet(key){
+  return openIdb().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  }));
+}
+function idbSet(key, value){
+  return openIdb().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  }));
+}
+function normalizeLoadedState(parsed){
+  const d = defaultState();
+  parsed.settings = Object.assign({}, d.settings, parsed.settings||{});
+  parsed.payouts = parsed.payouts || [];
+  parsed.expenses = parsed.expenses || [];
+  return parsed;
+}
+async function loadInitial(){
+  try{
+    const fromIdb = await idbGet(IDB_KEY);
+    if(fromIdb) return normalizeLoadedState(fromIdb);
+  }catch(e){ console.error('IndexedDB load failed', e); }
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw){
-      const parsed = JSON.parse(raw);
-      const d = defaultState();
-      parsed.settings = Object.assign({}, d.settings, parsed.settings||{});
-      parsed.payouts = parsed.payouts || [];
-      parsed.expenses = parsed.expenses || [];
-      return parsed;
+      const migrated = normalizeLoadedState(JSON.parse(raw));
+      await idbSet(IDB_KEY, migrated).catch(e=>console.error('migration save failed', e));
+      return migrated;
     }
-  }catch(e){ console.error('load failed', e); }
+  }catch(e){ console.error('legacy load failed', e); }
   return defaultState();
 }
-function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function save(){
+  idbSet(IDB_KEY, state).catch(e=>{ console.error('save failed', e); toast('保存に失敗しました。空き容量をご確認ください'); });
+}
 
 function toast(msg){
   const t = document.getElementById('toast');
@@ -1349,6 +1391,13 @@ function renderSettings(){
       </div>
     </div>
     <div class="section">
+      <div class="sectitle">データ整理（古い記録の削除）</div>
+      <p class="small">会計履歴・勤怠・支給記録・買い出し記録のうち、指定日より前のものをバックアップに書き出してから削除します。店舗設定・卓・メニュー・スタッフ情報は削除されません。</p>
+      <label>この日より前のデータを削除</label>
+      <input id="purgeBefore" type="date" value="${new Date(Date.now()-365*86400000).toISOString().slice(0,10)}">
+      <div class="btnrow"><button class="btn danger" data-action="archiveAndPurge">バックアップしてから削除する</button></div>
+    </div>
+    <div class="section">
       <div class="sectitle">初期化</div>
       <button class="btn danger" data-action="resetAll">全データを削除して初期化</button>
     </div>
@@ -1411,6 +1460,36 @@ function resetAll(){
   if(!confirm('最終確認：全ての会計・給与・設定データが消えます。よろしいですか？')) return;
   state = defaultState(); save(); applyHeader(); renderCurrentTab();
   toast('初期化しました');
+}
+function sessionArchiveDate(s){
+  if(s.status==='closed') return dateStr(s.closeTime);
+  if(s.status==='cancelled') return dateStr(s.cancelledAt||s.openTime);
+  if(s.status==='merged') return dateStr(s.mergedAt||s.openTime);
+  return null; // open sessions are never purged
+}
+function countPurgeTargets(cutoff){
+  return {
+    sessions: state.sessions.filter(s=>{ const d=sessionArchiveDate(s); return d!=null && d<cutoff; }).length,
+    shifts: state.shifts.filter(x=>x.date<cutoff).length,
+    payouts: state.payouts.filter(x=>x.periodEnd<cutoff).length,
+    expenses: state.expenses.filter(x=>x.date<cutoff).length
+  };
+}
+function archiveAndPurgeFn(){
+  const cutoff = document.getElementById('purgeBefore').value;
+  if(!cutoff){ toast('日付を選択してください'); return; }
+  const c = countPurgeTargets(cutoff);
+  const totalCount = c.sessions + c.shifts + c.payouts + c.expenses;
+  if(totalCount===0){ toast('この日より前の削除対象データはありません'); return; }
+  const msg = `${cutoff} より前のデータを削除します。\n会計履歴 ${c.sessions}件／勤怠 ${c.shifts}件／支給記録 ${c.payouts}件／買い出し記録 ${c.expenses}件\n\n先にバックアップファイルをダウンロードしてから削除します。よろしいですか？`;
+  if(!confirm(msg)) return;
+  exportData();
+  state.sessions = state.sessions.filter(s=>{ const d=sessionArchiveDate(s); return !(d!=null && d<cutoff); });
+  state.shifts = state.shifts.filter(x=>!(x.date<cutoff));
+  state.payouts = state.payouts.filter(x=>!(x.periodEnd<cutoff));
+  state.expenses = state.expenses.filter(x=>!(x.date<cutoff));
+  save(); renderSettings();
+  toast(`${totalCount}件の古いデータを削除しました`);
 }
 
 /* ---------- misc ---------- */
@@ -1484,7 +1563,8 @@ const ACTIONS = {
   saveTable:(el)=> saveTable(el.dataset.id, el.dataset.existing),
   deleteTable:(el)=> deleteTable(el.dataset.id),
   exportData:()=> exportData(),
-  resetAll:()=> resetAll()
+  resetAll:()=> resetAll(),
+  archiveAndPurge:()=> archiveAndPurgeFn()
 };
 document.addEventListener('click',(e)=>{
   const el = e.target.closest('[data-action]');
@@ -1494,9 +1574,13 @@ document.addEventListener('click',(e)=>{
 });
 
 /* ---------- init ---------- */
-applyHeader();
-renderCurrentTab();
-setInterval(tick, 1000);
+(async function init(){
+  if(navigator.storage && navigator.storage.persist){ navigator.storage.persist().catch(()=>{}); }
+  state = await loadInitial();
+  applyHeader();
+  renderCurrentTab();
+  setInterval(tick, 1000);
+})();
 </script>
 </body>
 </html>
