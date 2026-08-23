@@ -191,7 +191,8 @@ function defaultState(){
     staff:[],
     shifts:[],
     sessions:[],
-    payouts:[]
+    payouts:[],
+    expenses:[]
   };
 }
 
@@ -206,6 +207,7 @@ function load(){
       const d = defaultState();
       parsed.settings = Object.assign({}, d.settings, parsed.settings||{});
       parsed.payouts = parsed.payouts || [];
+      parsed.expenses = parsed.expenses || [];
       return parsed;
     }
   }catch(e){ console.error('load failed', e); }
@@ -1097,48 +1099,77 @@ function applyRankRange(){
   renderPayrollRanking();
 }
 
-/* ---------- DAILY SUMMARY ---------- */
-function renderDaily(){
-  const date = ui.dailyDate || new Date().toISOString().slice(0,10);
-  const sessions = state.sessions.filter(s=>s.status==='closed' && dateStr(s.closeTime)===date);
-  const byType = {};
-  let cash=0, card=0, expense=0;
-  const byTableCast = {};
+/* ---------- DAILY / PERIOD SUMMARY ---------- */
+function typeLabel(t){ return {set:'セット料金',extension:'延長料金',nomination:'指名料',drink:'ドリンク',bottle:'ボトル/商品',other:'その他'}[t]||t; }
+function computeSummary(start, end){
+  const sessions = state.sessions.filter(s=>s.status==='closed' && s.closeTime && dateStr(s.closeTime)>=start && dateStr(s.closeTime)<=end);
+  const byType = {}; let cash=0, card=0; const byTableCast = {};
   sessions.forEach(s=>{
     if(s.paymentMethod==='card') card += sessionTotal(s); else cash += sessionTotal(s);
     (s.items||[]).forEach(it=>{
       const key = typeLabel(it.type);
       byType[key] = (byType[key]||0) + it.unitPrice*it.qty;
-      if(it.type==='extension'){} // set/extension are store revenue, not expense
       const tb = tableById(s.tableId);
       const label = (tb?tb.name:'?') + (it.attributedCastId? '／'+ (staffById(it.attributedCastId)?.name||'') : '');
       byTableCast[label] = (byTableCast[label]||0) + it.unitPrice*it.qty;
     });
   });
-  const transportExpense = state.shifts.filter(x=>x.date===date).reduce((sum,x)=>sum+(x.transportFee||0),0);
+  const transportExpense = state.shifts.filter(x=>x.date>=start && x.date<=end).reduce((sum,x)=>sum+(x.transportFee||0),0);
+  const expenses = state.expenses.filter(e=>e.date>=start && e.date<=end).sort((a,b)=>b.date.localeCompare(a.date));
+  const purchaseExpense = expenses.reduce((sum,e)=>sum+(e.amount||0),0);
   const totalSales = cash+card;
-  const profit = totalSales - transportExpense;
-  document.getElementById('app').innerHTML = `
-    <h2 class="viewtitle">当日収支</h2>
-    <label>対象日</label><input id="dDate" type="date" value="${date}">
-    <button class="btn sm" data-action="applyDailyDate" style="margin:10px 0 16px">この日で表示</button>
+  const totalExpense = transportExpense + purchaseExpense;
+  return {sessions, byType, byTableCast, cash, card, totalSales, transportExpense, expenses, purchaseExpense, totalExpense, profit: totalSales - totalExpense};
+}
+function summarySubnav(){
+  return `<div class="btnrow" style="margin-bottom:14px">
+    <button class="btn sm ${ui.summaryView!=='range'?'primary':'ghost'}" data-action="summaryView" data-view="day">日次</button>
+    <button class="btn sm ${ui.summaryView==='range'?'primary':'ghost'}" data-action="summaryView" data-view="range">期間集計</button>
+  </div>`;
+}
+function setSummaryView(v){ ui.summaryView = v; renderDaily(); }
+function summaryBlocks(sum){
+  return `
     <div class="statgrid">
-      <div class="stat"><div class="v">${yen(totalSales)}</div><div class="k">総売上</div></div>
-      <div class="stat"><div class="v">${yen(cash)}</div><div class="k">現金</div></div>
-      <div class="stat"><div class="v">${yen(card)}</div><div class="k">カード</div></div>
-      <div class="stat"><div class="v">${yen(profit)}</div><div class="k">粗利益(送迎費差引)</div></div>
+      <div class="stat"><div class="v">${yen(sum.totalSales)}</div><div class="k">総売上</div></div>
+      <div class="stat"><div class="v">${yen(sum.cash)}</div><div class="k">現金</div></div>
+      <div class="stat"><div class="v">${yen(sum.card)}</div><div class="k">カード</div></div>
+      <div class="stat"><div class="v">${yen(sum.profit)}</div><div class="k">粗利益(経費差引)</div></div>
     </div>
     <div class="section">
       <div class="sectitle">売上項目別内訳</div>
-      <div class="list">${Object.entries(byType).map(([k,v])=>`<div class="row"><div class="rmain rtitle">${k}</div><div class="ramt">${yen(v)}</div></div>`).join('')||'<div class="empty-hint">データなし</div>'}</div>
+      <div class="list">${Object.entries(sum.byType).map(([k,v])=>`<div class="row"><div class="rmain rtitle">${k}</div><div class="ramt">${yen(v)}</div></div>`).join('')||'<div class="empty-hint">データなし</div>'}</div>
     </div>
     <div class="section">
       <div class="sectitle">卓・キャスト別内訳</div>
-      <div class="list">${Object.entries(byTableCast).map(([k,v])=>`<div class="row"><div class="rmain rtitle">${esc(k)}</div><div class="ramt">${yen(v)}</div></div>`).join('')||'<div class="empty-hint">データなし</div>'}</div>
+      <div class="list">${Object.entries(sum.byTableCast).map(([k,v])=>`<div class="row"><div class="rmain rtitle">${esc(k)}</div><div class="ramt">${yen(v)}</div></div>`).join('')||'<div class="empty-hint">データなし</div>'}</div>
+    </div>`;
+}
+function expenseListHtml(sum, allowEdit){
+  return sum.expenses.map(e=>`<div class="row">
+    <div class="rmain"><div class="rtitle">${esc(e.name)}</div>
+    <div class="rsub">${e.date}${e.purchasedByStaffId?'／購入: '+esc(staffById(e.purchasedByStaffId)?.name||''):''}${e.note?'／'+esc(e.note):''}</div></div>
+    <div class="ramt">-${yen(e.amount)}</div>
+    ${allowEdit?`<button class="btn sm danger" data-action="deleteExpense" data-id="${e.id}">削除</button>`:''}
+  </div>`).join('') || '<div class="empty-hint">買い出し・仕入れの記録はありません</div>';
+}
+function renderDaily(){
+  if(ui.summaryView==='range'){ renderSummaryRange(); return; }
+  const date = ui.dailyDate || new Date().toISOString().slice(0,10);
+  const sum = computeSummary(date, date);
+  document.getElementById('app').innerHTML = `
+    <h2 class="viewtitle">収支</h2>
+    ${summarySubnav()}
+    <label>対象日</label><input id="dDate" type="date" value="${date}">
+    <button class="btn sm" data-action="applyDailyDate" style="margin:10px 0 16px">この日で表示</button>
+    ${summaryBlocks(sum)}
+    <div class="section">
+      <div class="sectitle">経費（送迎費 ${yen(sum.transportExpense)}／仕入れ・買い出し ${yen(sum.purchaseExpense)}） <button class="btn sm" data-action="expenseModal" data-date="${date}">＋買い出しを追加</button></div>
+      <div class="list">${expenseListHtml(sum, true)}</div>
     </div>
     <div class="section">
       <div class="sectitle">確定履歴（確認者付き）</div>
-      <div class="list">${sessions.map(s=>{
+      <div class="list">${sum.sessions.map(s=>{
         const tb=tableById(s.tableId);
         return `<div class="row"><div class="rmain"><div class="rtitle">${esc(tb?tb.name:'?')}卓</div>
         <div class="rsub">確認: ${esc(staffById(s.confirmedByStaffId)?.name||'-')}／${new Date(s.closeTime).toLocaleTimeString('ja-JP',{hour12:false})}</div></div>
@@ -1147,8 +1178,86 @@ function renderDaily(){
     </div>
   `;
 }
-function typeLabel(t){ return {set:'セット料金',extension:'延長料金',nomination:'指名料',drink:'ドリンク',bottle:'ボトル/商品',other:'その他'}[t]||t; }
 function applyDailyDate(){ ui.dailyDate = document.getElementById('dDate').value; renderDaily(); }
+function renderSummaryRange(){
+  const today = new Date().toISOString().slice(0,10);
+  const monthStart = today.slice(0,8)+'01';
+  const start = ui.summaryStart || monthStart;
+  const end = ui.summaryEnd || today;
+  const sum = computeSummary(start, end);
+  document.getElementById('app').innerHTML = `
+    <h2 class="viewtitle">収支</h2>
+    ${summarySubnav()}
+    <div class="formgrid" style="margin-bottom:10px">
+      <div><label>開始日</label><input id="sumStart" type="date" value="${start}"></div>
+      <div><label>終了日</label><input id="sumEnd" type="date" value="${end}"></div>
+    </div>
+    <button class="btn sm" data-action="applySummaryRange" style="margin-bottom:16px">この期間で集計</button>
+    ${summaryBlocks(sum)}
+    <div class="section">
+      <div class="sectitle">経費（送迎費 ${yen(sum.transportExpense)}／仕入れ・買い出し ${yen(sum.purchaseExpense)}）</div>
+      <div class="list">${expenseListHtml(sum, false)}</div>
+    </div>
+  `;
+}
+function applySummaryRange(){
+  ui.summaryStart = document.getElementById('sumStart').value;
+  ui.summaryEnd = document.getElementById('sumEnd').value;
+  renderSummaryRange();
+}
+function expenseModalFn(date){
+  const staffOpts = `<option value="">（未選択）</option>` + activeStaff().map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  openModal(`
+    <h3>買い出し・仕入れを追加 <span class="x" data-action="closeModalAndRefreshDaily">&times;</span></h3>
+    <label>日付</label><input id="eDate" type="date" value="${date}">
+    <label>購入者（任意・この日付の間は共通）</label><select id="eStaff">${staffOpts}</select>
+    <label>品名</label><input id="eName" placeholder="例）氷・おつまみ・備品 など">
+    <label>金額</label><input id="eAmt" type="number" value="0">
+    <label>メモ（任意）</label><input id="eNote">
+    <div class="btnrow"><button class="btn primary block" data-action="confirmAddExpense">この項目を追加して、続けて入力する</button></div>
+    <div class="sectitle" style="margin-top:18px">今回入力した項目</div>
+    <div class="list" id="eAddedList"></div>
+    <div class="btnrow"><button class="btn ghost block" data-action="closeModalAndRefreshDaily">入力を終える</button></div>
+  `);
+  refreshAddedExpenseList(date);
+}
+function refreshAddedExpenseList(date){
+  const list = document.getElementById('eAddedList');
+  if(!list) return;
+  const todays = state.expenses.filter(e=>e.date===date).sort((a,b)=>b.createdAt-a.createdAt);
+  list.innerHTML = todays.map(e=>`<div class="row">
+    <div class="rmain"><div class="rtitle">${esc(e.name)}</div><div class="rsub">${e.purchasedByStaffId?'購入: '+esc(staffById(e.purchasedByStaffId)?.name||''):''}${e.note?'／'+esc(e.note):''}</div></div>
+    <div class="ramt">-${yen(e.amount)}</div>
+    <button class="btn sm danger" data-action="deleteExpenseInModal" data-id="${e.id}" data-date="${date}">削除</button>
+  </div>`).join('') || '<div class="empty-hint">まだありません</div>';
+}
+function confirmAddExpenseFn(){
+  const date = document.getElementById('eDate').value;
+  if(!date){ toast('日付を入力してください'); return; }
+  const name = document.getElementById('eName').value.trim();
+  if(!name){ toast('品名を入力してください'); return; }
+  const amount = parseInt(document.getElementById('eAmt').value)||0;
+  const purchasedByStaffId = document.getElementById('eStaff').value || null;
+  const note = document.getElementById('eNote').value.trim();
+  state.expenses.push({id:uid('ex'), date, name, amount, purchasedByStaffId, note, createdAt:Date.now()});
+  save();
+  document.getElementById('eName').value='';
+  document.getElementById('eAmt').value='0';
+  document.getElementById('eNote').value='';
+  document.getElementById('eName').focus();
+  refreshAddedExpenseList(date);
+  toast('追加しました。続けて次の品目を入力できます');
+}
+function deleteExpenseInModalFn(id, date){
+  state.expenses = state.expenses.filter(e=>e.id!==id);
+  save(); refreshAddedExpenseList(date);
+}
+function deleteExpenseFn(id){
+  if(!confirm('この記録を削除しますか？')) return;
+  state.expenses = state.expenses.filter(e=>e.id!==id);
+  save(); renderDaily();
+}
+function closeModalAndRefreshDaily(){ closeModal(); renderDaily(); }
 
 /* ---------- SETTINGS ---------- */
 function renderSettings(){
@@ -1300,6 +1409,13 @@ const ACTIONS = {
   cancelPayout:(el)=> cancelPayoutFn(el.dataset.id),
   applyRankRange:()=> applyRankRange(),
   applyDailyDate:()=> applyDailyDate(),
+  summaryView:(el)=> setSummaryView(el.dataset.view),
+  applySummaryRange:()=> applySummaryRange(),
+  expenseModal:(el)=> expenseModalFn(el.dataset.date),
+  confirmAddExpense:()=> confirmAddExpenseFn(),
+  deleteExpense:(el)=> deleteExpenseFn(el.dataset.id),
+  deleteExpenseInModal:(el)=> deleteExpenseInModalFn(el.dataset.id, el.dataset.date),
+  closeModalAndRefreshDaily:()=> closeModalAndRefreshDaily(),
   saveSettings:()=> saveSettingsFn(),
   editTable:(el)=> editTableModal(el.dataset.id||null),
   saveTable:(el)=> saveTable(el.dataset.id, el.dataset.existing),
