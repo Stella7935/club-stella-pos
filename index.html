@@ -263,6 +263,13 @@ function findSetPrice(planId, guestCount, castCount){
   const row = plan.rows.find(r=> guestCount>=r.minGuests && guestCount<=r.maxGuests && castCount>=r.minCast && castCount<=r.maxCast);
   return row ? row.price : null;
 }
+function findExtensionPrice(planId, guestCount, castCount){
+  const plan = planById(planId);
+  if(!plan) return null;
+  const row = plan.rows.find(r=> guestCount>=r.minGuests && guestCount<=r.maxGuests && castCount>=r.minCast && castCount<=r.maxCast);
+  if(row && row.extPrice!=null) return row.extPrice;
+  return plan.extensionPrice;
+}
 
 /* ---------- Nav ---------- */
 const TABS = [
@@ -440,13 +447,14 @@ function renderSession(sessionId){
       ${mergedChildren.length?`<div class="small" style="margin-top:6px">合算中: ${mergedChildren.map(c=>esc(tableById(c.tableId).name)+'卓').join('・')}</div>`:''}
     </div>
     ${s.status==='open'?`<div class="btnrow">
-      <button class="btn" data-action="extendSession" data-sid="${s.id}">＋延長</button>
+      <button class="btn" data-action="extendSessionModal" data-sid="${s.id}">＋延長</button>
       <button class="btn" data-action="addItem" data-type="nomination" data-sid="${s.id}">＋指名料</button>
       <button class="btn" data-action="addItem" data-type="drink" data-sid="${s.id}">＋キャストドリンク</button>
       <button class="btn" data-action="addItem" data-type="bottle" data-sid="${s.id}">＋ボトル/商品</button>
       <button class="btn" data-action="addItem" data-type="free" data-sid="${s.id}">＋自由入力</button>
       <button class="btn wine" data-action="mergeTableModal" data-sid="${s.id}">他の卓を合算</button>
     </div>`:''}
+    ${s.status==='open'?`<div class="btnrow"><button class="btn sm danger" data-action="cancelSession" data-sid="${s.id}">間違えて開いた卓をキャンセル</button></div>`:''}
     <div class="section" style="margin-top:16px">
       <div class="sectitle">明細</div>
       <div class="list">${itemsHtml}</div>
@@ -484,15 +492,46 @@ function fmtClock(ms){
   return h>0? `${h}:${pad2(m)}:${pad2(sec)}` : `${pad2(m)}:${pad2(sec)}`;
 }
 
-function extendSession(sid){
+function extendSessionModal(sid){
   const s = state.sessions.find(x=>x.id===sid);
   const plan = planById(s.setPlanId);
   if(!plan) return;
+  const castOpts = activeCast().map(c=>`<span class="chip ${s.castIds.includes(c.id)?'on':''}" data-role="cast" data-id="${c.id}">${esc(c.name)}</span>`).join('') || '<span class="small">キャスト未登録です</span>';
+  openModal(`
+    <h3>延長（${plan.extensionMin}分） <span class="x" data-action="closeModal">&times;</span></h3>
+    <p class="small">延長前に人数・担当に変更があれば、ここで修正してから延長できます。</p>
+    <label>人数</label>
+    <input type="number" id="mGuest" min="1" value="${s.guestCount}" inputmode="numeric">
+    <label>担当キャスト（複数選択可）</label>
+    <div class="chipsel" id="mCastSel">${castOpts}</div>
+    <label>延長料金（人数・担当に応じて自動計算・手動修正可）</label>
+    <input type="number" id="mExtPrice" value="${findExtensionPrice(s.setPlanId, s.guestCount, s.castIds.length||1) ?? plan.extensionPrice}" inputmode="numeric">
+    <div class="btnrow"><button class="btn primary block" data-action="confirmExtendSession" data-sid="${sid}">この内容で延長する</button></div>
+  `);
+  const recalc = ()=>{
+    const g = parseInt(document.getElementById('mGuest').value)||1;
+    const castCount = document.querySelectorAll('#mCastSel .chip.on').length;
+    const price = findExtensionPrice(s.setPlanId, g, castCount||1);
+    if(price!=null) document.getElementById('mExtPrice').value = price;
+  };
+  document.getElementById('mGuest').addEventListener('input', recalc);
+  document.getElementById('mCastSel').addEventListener('click', (e)=>{
+    const chip = e.target.closest('.chip'); if(!chip) return;
+    chip.classList.toggle('on'); recalc();
+  });
+}
+function confirmExtendSession(sid){
+  const s = state.sessions.find(x=>x.id===sid);
+  const plan = planById(s.setPlanId);
+  if(!plan) return;
+  s.guestCount = parseInt(document.getElementById('mGuest').value)||1;
+  s.castIds = [...document.querySelectorAll('#mCastSel .chip.on')].map(c=>c.dataset.id);
+  const extPrice = parseInt(document.getElementById('mExtPrice').value)||0;
   s.setEndTime += plan.extensionMin*60000;
   s.extensionCount = (s.extensionCount||0)+1;
   s._alert = {};
-  s.items.push({id:uid('it'), type:'extension', name:`延長(${plan.extensionMin}分)`, unitPrice:plan.extensionPrice, qty:1, attributedCastId:null, createdAt:Date.now()});
-  save(); renderSession(sid); toast('延長しました');
+  s.items.push({id:uid('it'), type:'extension', name:`延長(${plan.extensionMin}分)`, unitPrice:extPrice, qty:1, attributedCastId:null, createdAt:Date.now()});
+  save(); closeModal(); renderSession(sid); toast('延長しました');
 }
 function editGuestsModal(sid){
   const s = state.sessions.find(x=>x.id===sid);
@@ -569,6 +608,15 @@ function removeItem(sid,iid){
   const s = state.sessions.find(x=>x.id===sid);
   s.items = s.items.filter(it=>it.id!==iid);
   save(); renderSession(sid);
+}
+function cancelSession(sid){
+  if(!confirm('この卓のオープンを取り消しますか？入力した明細も削除され、卓は空席に戻ります。')) return;
+  const s = state.sessions.find(x=>x.id===sid);
+  s.status = 'cancelled';
+  s.cancelledAt = Date.now();
+  save();
+  ui.sessionId = null; ui.tab = 'floor'; renderCurrentTab();
+  toast('卓のオープンを取り消しました');
 }
 
 function addItemModal(sid, type){
@@ -740,7 +788,7 @@ function editPlanModal(id){
   const p = id? planById(id) : {id:uid('pl'),name:'',durationMin:60,extensionMin:30,extensionPrice:5000,rows:[]};
   const rowsHtml = p.rows.map((r,i)=>`
     <div class="row" data-rowidx="${i}">
-      <div class="rmain rsub">${r.minGuests}〜${r.maxGuests}名／担当${r.minCast}〜${r.maxCast}名 → ${yen(r.price)}</div>
+      <div class="rmain rsub">${r.minGuests}〜${r.maxGuests}名／担当${r.minCast}〜${r.maxCast}名 → ${yen(r.price)}／延長${yen(r.extPrice!=null?r.extPrice:p.extensionPrice)}</div>
       <button class="btn sm danger" data-action="removePlanRow" data-idx="${i}">削除</button>
     </div>`).join('') || '<div class="empty-hint">料金パターンなし</div>';
   openModal(`
@@ -760,6 +808,7 @@ function editPlanModal(id){
       <div><label>担当 上限</label><input id="rMaxC" type="number" value="1"></div>
     </div>
     <label>この条件の料金</label><input id="rPrice" type="number" value="8000">
+    <label>この条件の延長料金（空欄なら共通の延長料金を使用）</label><input id="rExtPrice" type="number" placeholder="${p.extensionPrice}">
     <div class="btnrow"><button class="btn sm ghost block" data-action="addPlanRow" data-planid="${p.id}">パターンを追加</button></div>
     <div class="btnrow">
       <button class="btn primary block" data-action="savePlan" data-id="${p.id}">保存する</button>
@@ -769,12 +818,14 @@ function editPlanModal(id){
 }
 function addPlanRow(){
   const p = ui.editing.plan;
+  const extPriceRaw = document.getElementById('rExtPrice').value;
   p.rows.push({
     minGuests:parseInt(document.getElementById('rMinG').value)||1,
     maxGuests:parseInt(document.getElementById('rMaxG').value)||1,
     minCast:parseInt(document.getElementById('rMinC').value)||1,
     maxCast:parseInt(document.getElementById('rMaxC').value)||1,
-    price:parseInt(document.getElementById('rPrice').value)||0
+    price:parseInt(document.getElementById('rPrice').value)||0,
+    extPrice: extPriceRaw===''? null : (parseInt(extPriceRaw)||0)
   });
   editPlanModal(p.id && planById(p.id) ? p.id : null);
   ui.editing.plan = p;
@@ -783,7 +834,7 @@ function addPlanRow(){
 function refreshPlanRowsList(){
   const p = ui.editing.plan;
   document.getElementById('rowsList').innerHTML = p.rows.map((r,i)=>`
-    <div class="row"><div class="rmain rsub">${r.minGuests}〜${r.maxGuests}名／担当${r.minCast}〜${r.maxCast}名 → ${yen(r.price)}</div>
+    <div class="row"><div class="rmain rsub">${r.minGuests}〜${r.maxGuests}名／担当${r.minCast}〜${r.maxCast}名 → ${yen(r.price)}／延長${yen(r.extPrice!=null?r.extPrice:p.extensionPrice)}</div>
     <button class="btn sm danger" data-action="removePlanRow" data-idx="${i}">削除</button></div>`).join('') || '<div class="empty-hint">料金パターンなし</div>';
 }
 function removePlanRow(idx){ ui.editing.plan.rows.splice(idx,1); refreshPlanRowsList(); }
@@ -1374,7 +1425,8 @@ const ACTIONS = {
   confirmOpenTable:(el)=> confirmOpenTable(el.dataset.tableid),
   openSession:(el)=>{ ui.sessionId = el.dataset.id; renderCurrentTab(); },
   closeModal:()=> closeModal(),
-  extendSession:(el)=> extendSession(el.dataset.sid),
+  extendSessionModal:(el)=> extendSessionModal(el.dataset.sid),
+  confirmExtendSession:(el)=> confirmExtendSession(el.dataset.sid),
   editGuests:(el)=> editGuestsModal(el.dataset.sid),
   confirmEditGuests:(el)=> confirmEditGuests(el.dataset.sid),
   mergeTableModal:(el)=> mergeTableModal(el.dataset.sid),
@@ -1382,6 +1434,7 @@ const ACTIONS = {
   addItem:(el)=> addItemModal(el.dataset.sid, el.dataset.type),
   confirmAddItem:(el)=> confirmAddItem(el.dataset.sid, el.dataset.type),
   removeItem:(el)=> removeItem(el.dataset.sid, el.dataset.iid),
+  cancelSession:(el)=> cancelSession(el.dataset.sid),
   closeSessionModal:(el)=> closeSessionModalFn(el.dataset.sid),
   confirmCloseSession:(el)=> confirmCloseSession(el.dataset.sid),
   editPlan:(el)=> editPlanModal(el.dataset.id||null),
