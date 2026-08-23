@@ -1039,15 +1039,18 @@ function renderPayroll(){
   const today = new Date().toISOString().slice(0,10);
   const start = ui.payrollStart || today;
   const end = ui.payrollEnd || today;
+  ui.payrollRevealed = ui.payrollRevealed || {};
   const rows = activeStaff().map(s=>{
     const r = computePayroll(s.id, start, end);
     const payout = findPayout(s.id, start, end);
+    const revealed = !!ui.payrollRevealed[s.id];
     return `<div class="row">
       <div class="rmain"><div class="rtitle">${esc(s.name)} ${payout?'<span class="badge g">支給済み</span>':''}</div>
-      <div class="rsub">稼働${r.hours.toFixed(1)}h／時給${yen(r.wage)}／バック${yen(r.backTotal)}(${r.backCount}件)／送迎-${yen(r.transport)}</div>
-      ${payout?`<div class="rsub">確認: ${esc(staffById(payout.confirmedByStaffId)?.name||'-')}／${new Date(payout.confirmedAt).toLocaleString('ja-JP',{hour12:false})}</div>`:''}</div>
+      <div class="rsub">${revealed?`稼働${r.hours.toFixed(1)}h／時給${yen(r.wage)}／バック${yen(r.backTotal)}(${r.backCount}件)／送迎-${yen(r.transport)}`:'金額は非表示中（「表示」を押すと確認できます）'}</div>
+      ${payout&&revealed?`<div class="rsub">確認: ${esc(staffById(payout.confirmedByStaffId)?.name||'-')}／${new Date(payout.confirmedAt).toLocaleString('ja-JP',{hour12:false})}</div>`:''}</div>
       <div class="ractions">
-        <div class="ramt">${yen(r.net)}</div>
+        <div class="ramt">${revealed?yen(r.net):'¥ ●●●●●'}</div>
+        <button class="btn sm ghost" data-action="togglePayrollReveal" data-staffid="${s.id}">${revealed?'隠す':'表示'}</button>
         ${payout
           ? `<button class="btn sm danger" data-action="cancelPayout" data-id="${payout.id}">支給取消</button>`
           : `<button class="btn sm primary" data-action="payoutModal" data-staffid="${s.id}" data-start="${start}" data-end="${end}" data-amount="${Math.round(r.net)}">支給済みにする</button>`}
@@ -1057,6 +1060,7 @@ function renderPayroll(){
   document.getElementById('app').innerHTML = `
     <h2 class="viewtitle">給与計算</h2>
     ${payrollSubnav()}
+    <p class="small" style="margin-bottom:10px">金額は初期状態で非表示です。渡す相手の分だけ「表示」を押して確認してください。</p>
     <div class="formgrid" style="margin-bottom:14px">
       <div><label>開始日</label><input id="pStart" type="date" value="${start}"></div>
       <div><label>終了日</label><input id="pEnd" type="date" value="${end}"></div>
@@ -1064,6 +1068,11 @@ function renderPayroll(){
     <button class="btn sm" data-action="applyPayrollRange" style="margin-bottom:14px">この期間で計算</button>
     <div class="list">${rows}</div>
   `;
+}
+function togglePayrollReveal(staffId){
+  ui.payrollRevealed = ui.payrollRevealed || {};
+  ui.payrollRevealed[staffId] = !ui.payrollRevealed[staffId];
+  renderPayroll();
 }
 function applyPayrollRange(){
   ui.payrollStart = document.getElementById('pStart').value;
@@ -1419,7 +1428,7 @@ function renderCurrentTab(){
 
 /* ---------- Event delegation ---------- */
 const ACTIONS = {
-  tab:(el)=>{ ui.tab = el.dataset.tab; ui.sessionId=null; renderCurrentTab(); },
+  tab:(el)=>{ ui.tab = el.dataset.tab; ui.sessionId=null; if(el.dataset.tab==='payroll') ui.payrollRevealed = {}; renderCurrentTab(); },
   backToFloor:()=>{ ui.sessionId=null; ui.tab='floor'; renderCurrentTab(); },
   openTable:(el)=> openTableModal(el.dataset.id),
   confirmOpenTable:(el)=> confirmOpenTable(el.dataset.tableid),
@@ -1457,6 +1466,7 @@ const ACTIONS = {
   deleteShift:(el)=> deleteShift(el.dataset.id, el.dataset.staffid),
   applyPayrollRange:()=> applyPayrollRange(),
   payrollView:(el)=> setPayrollView(el.dataset.view),
+  togglePayrollReveal:(el)=> togglePayrollReveal(el.dataset.staffid),
   payoutModal:(el)=> payoutModalFn(el.dataset.staffid, el.dataset.start, el.dataset.end, el.dataset.amount),
   confirmPayout:(el)=> confirmPayoutFn(el.dataset.staffid, el.dataset.start, el.dataset.end, el.dataset.amount),
   cancelPayout:(el)=> cancelPayoutFn(el.dataset.id),
