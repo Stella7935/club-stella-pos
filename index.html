@@ -997,9 +997,13 @@ function deleteRank(id){ if(!confirm('このランクを削除しますか？'))
 
 /* ---------- STAFF ---------- */
 function renderStaff(){
+  const showAll = !!ui.staffShowInactive;
+  const list = showAll ? state.staff : state.staff.filter(s=>s.active!==false);
+  const inactiveCount = state.staff.filter(s=>s.active===false).length;
   document.getElementById('app').innerHTML = `
     <h2 class="viewtitle">スタッフ管理 <button class="btn sm primary" data-action="editStaff"><span>＋追加</span></button></h2>
-    <div class="list">${state.staff.map(s=>`
+    ${inactiveCount>0?`<div class="btnrow" style="margin-bottom:12px"><button class="btn sm ${showAll?'primary':'ghost'}" data-action="toggleStaffShowInactive">${showAll?`退店者を隠す`:`退店者も表示（${inactiveCount}名）`}</button></div>`:''}
+    <div class="list">${list.map(s=>`
       <div class="row">
         <div class="rmain">
           <div class="rtitle">${esc(s.name)} ${s.active===false?'<span class="badge r">退店</span>':''}</div>
@@ -1011,6 +1015,7 @@ function renderStaff(){
   `;
 }
 function roleLabel(r){ return {cast:'キャスト',boy:'ボーイ',manager:'マネージャー',other:'その他'}[r]||r; }
+function toggleStaffShowInactive(){ ui.staffShowInactive = !ui.staffShowInactive; renderStaff(); }
 function editStaffModal(id){
   const s = id? staffById(id) : {id:uid('st'),name:'',role:'cast',hourlyWage:1500,backType:'percent',backValue:50,nominationRankId:'',phone:'',address:'',active:true};
   const rankOpts = `<option value="">なし</option>` + state.nominationRanks.map(r=>`<option value="${r.id}" ${s.nominationRankId===r.id?'selected':''}>${esc(r.name)}</option>`).join('');
@@ -1593,6 +1598,7 @@ const ACTIONS = {
   saveRank:(el)=> saveRank(el.dataset.id, el.dataset.existing),
   deleteRank:(el)=> deleteRank(el.dataset.id),
   editStaff:(el)=> editStaffModal(el.dataset.id||null),
+  toggleStaffShowInactive:()=> toggleStaffShowInactive(),
   toggleActive:(el)=> el.classList.toggle('on'),
   saveStaff:(el)=> saveStaff(el.dataset.id, el.dataset.existing),
   shiftModal:(el)=> shiftModalFn(el.dataset.id),
