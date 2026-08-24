@@ -409,7 +409,8 @@ function openTableModal(tableId){
     <label>セットプラン</label>
     <select id="mPlan">${plans.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
     <label>セット料金（自動計算・手動修正可）</label>
-    <input type="number" id="mPrice" value="0" inputmode="numeric">
+    <input type="number" id="mPrice" value="0" inputmode="numeric" placeholder="該当パターンなし・手動で入力">
+    <div class="small" id="mPriceHint" style="color:var(--amber);margin-top:4px"></div>
     <label>お支払いタイミング</label>
     <div class="chipsel">
       <span class="chip on" data-role="pay" data-id="prepay">先払い</span>
@@ -424,7 +425,9 @@ function openTableModal(tableId){
     const castCount = document.querySelectorAll('#mCastSel .chip.on').length;
     const planId = document.getElementById('mPlan').value;
     const price = findSetPrice(planId, g, castCount||1);
-    if(price!=null) document.getElementById('mPrice').value = price;
+    const hint = document.getElementById('mPriceHint');
+    if(price!=null){ document.getElementById('mPrice').value = price; hint.textContent=''; }
+    else{ document.getElementById('mPrice').value=''; hint.textContent = `この人数(${g}名)・担当(${castCount||1}名)に合う料金パターンが登録されていません。金額を手動で入力するか、メニュー管理で料金パターンを追加してください。`; }
   };
   document.getElementById('mGuest').addEventListener('input', recalc);
   document.getElementById('mPlan').addEventListener('change', recalc);
@@ -489,6 +492,7 @@ function renderSession(sessionId){
       ${mergedChildren.length?`<div class="small" style="margin-top:6px">合算中: ${mergedChildren.map(c=>esc(tableById(c.tableId).name)+'卓').join('・')}</div>`:''}
     </div>
     ${s.status==='open'?`<div class="btnrow">
+      <button class="btn" data-action="addItem" data-type="set" data-sid="${s.id}">＋セット料金</button>
       <button class="btn" data-action="extendSessionModal" data-sid="${s.id}">＋延長</button>
       <button class="btn" data-action="addItem" data-type="nomination" data-sid="${s.id}">＋指名料</button>
       <button class="btn" data-action="addItem" data-type="drink" data-sid="${s.id}">＋キャストドリンク</button>
@@ -586,7 +590,8 @@ function editGuestsModal(sid){
     <label>担当キャスト（複数選択可）</label>
     <div class="chipsel" id="mCastSel">${castOpts}</div>
     <label>セット料金（変更内容に応じて自動再計算・手動修正可）</label>
-    <input type="number" id="mPrice" value="${setItem?setItem.unitPrice:0}" inputmode="numeric">
+    <input type="number" id="mPrice" value="${setItem?setItem.unitPrice:0}" inputmode="numeric" placeholder="該当パターンなし・手動で入力">
+    <div class="small" id="mPriceHint" style="color:var(--amber);margin-top:4px"></div>
     <div class="chipsel" style="margin-top:10px"><span class="chip on" id="mApplyPrice" data-action="toggleBack">上記の料金を明細の「セット料金」に反映する</span></div>
     <div class="btnrow"><button class="btn primary block" data-action="confirmEditGuests" data-sid="${sid}">変更を保存する</button></div>
   `);
@@ -594,7 +599,9 @@ function editGuestsModal(sid){
     const g = parseInt(document.getElementById('mGuest').value)||1;
     const castCount = document.querySelectorAll('#mCastSel .chip.on').length;
     const price = findSetPrice(s.setPlanId, g, castCount||1);
-    if(price!=null) document.getElementById('mPrice').value = price;
+    const hint = document.getElementById('mPriceHint');
+    if(price!=null){ document.getElementById('mPrice').value = price; hint.textContent=''; }
+    else{ document.getElementById('mPrice').value=''; hint.textContent = `この人数(${g}名)・担当(${castCount||1}名)に合う料金パターンが登録されていません。金額を手動で入力するか、メニュー管理で料金パターンを追加してください。`; }
   };
   document.getElementById('mGuest').addEventListener('input', recalc);
   document.getElementById('mCastSel').addEventListener('click', (e)=>{
@@ -663,6 +670,42 @@ function cancelSession(sid){
 
 function addItemModal(sid, type){
   const s = state.sessions.find(x=>x.id===sid);
+  if(type==='set'){
+    const plans = state.setPlans;
+    const castOpts = activeCast().map(c=>`<span class="chip" data-role="cast" data-id="${c.id}">${esc(c.name)}</span>`).join('') || '<span class="small">キャスト未登録です</span>';
+    openModal(`
+      <h3>セット料金を追加 <span class="x" data-action="closeModal">&times;</span></h3>
+      <p class="small">誤って消してしまったセット料金の入れ直しや、後から合流した方の追加料金として使えます。</p>
+      <label>人数（この項目の対象人数）</label>
+      <input type="number" id="mGuest" min="1" value="1" inputmode="numeric">
+      <label>担当キャスト（複数選択可・料金の自動計算に使用）</label>
+      <div class="chipsel" id="mCastSel">${castOpts}</div>
+      <label>セットプラン</label>
+      <select id="mPlan">${plans.map(p=>`<option value="${p.id}" ${p.id===s.setPlanId?'selected':''}>${esc(p.name)}</option>`).join('')}</select>
+      <label>金額（自動計算・手動修正可）</label>
+      <input type="number" id="mPrice" value="0" inputmode="numeric" placeholder="該当パターンなし・手動で入力">
+      <div class="small" id="mPriceHint" style="color:var(--amber);margin-top:4px"></div>
+      <div class="chipsel" style="margin-top:10px"><span class="chip on" id="mAddToGuestCount" data-action="toggleBack">この人数・担当を卓の人数に加算する（合流の場合）</span></div>
+      <div class="btnrow"><button class="btn primary block" data-action="confirmAddItem" data-sid="${sid}" data-type="set">追加する</button></div>
+    `);
+    const recalc = ()=>{
+      const g = parseInt(document.getElementById('mGuest').value)||1;
+      const castCount = document.querySelectorAll('#mCastSel .chip.on').length;
+      const planId = document.getElementById('mPlan').value;
+      const price = findSetPrice(planId, g, castCount||1);
+      const hint = document.getElementById('mPriceHint');
+      if(price!=null){ document.getElementById('mPrice').value = price; hint.textContent=''; }
+      else{ document.getElementById('mPrice').value=''; hint.textContent = `この人数(${g}名)・担当(${castCount||1}名)に合う料金パターンが登録されていません。金額を手動で入力してください。`; }
+    };
+    document.getElementById('mGuest').addEventListener('input', recalc);
+    document.getElementById('mPlan').addEventListener('change', recalc);
+    document.getElementById('mCastSel').addEventListener('click', (e)=>{
+      const chip = e.target.closest('.chip'); if(!chip) return;
+      chip.classList.toggle('on'); recalc();
+    });
+    recalc();
+    return;
+  }
   if(type==='nomination'){
     const opts = activeCast().map(c=>{
       const rank = rankById(c.nominationRankId);
@@ -728,7 +771,19 @@ function addItemModal(sid, type){
 function confirmAddItem(sid, type){
   const s = state.sessions.find(x=>x.id===sid);
   let item;
-  if(type==='nomination'){
+  if(type==='set'){
+    const g = parseInt(document.getElementById('mGuest').value)||1;
+    const castIds = [...document.querySelectorAll('#mCastSel .chip.on')].map(c=>c.dataset.id);
+    const planId = document.getElementById('mPlan').value;
+    const plan = planById(planId);
+    const price = parseInt(document.getElementById('mPrice').value)||0;
+    const addToGuestCount = document.getElementById('mAddToGuestCount').classList.contains('on');
+    item = {id:uid('it'), type:'set', name:`セット料金(${plan?plan.name:''})`, unitPrice:price, qty:1, attributedCastId:null, createdAt:Date.now()};
+    if(addToGuestCount){
+      s.guestCount += g;
+      castIds.forEach(id=>{ if(!s.castIds.includes(id)) s.castIds.push(id); });
+    }
+  } else if(type==='nomination'){
     const castId = document.getElementById('mCast').value;
     const amt = parseInt(document.getElementById('mAmt').value)||0;
     if(!castId){ toast('キャストを選択してください'); return; }
